@@ -1,0 +1,64 @@
+{
+  "expo": {
+    "name": "TimeStream",
+    "slug": "timestream-miles",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "timestream",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.timestream.miles",
+      "infoPlist": {
+        "UIBackgroundModes": ["location"],
+        "NSLocationWhenInUseUsageDescription": "TimeStream tracks your location only while you are clocked in to calculate work mileage.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "TimeStream tracks mileage in the background only during an active shift.",
+        "NSLocationAlwaysUsageDescription": "TimeStream tracks mileage in the background only during an active shift."
+      }
+    },
+    "android": {
+      "package": "com.timestream.miles",
+      "adaptiveIcon": {
+        "backgroundColor": "#0B3D2E",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "navigationBar": {
+        "backgroundColor": "#0f172a",
+        "barStyle": "light-content",
+        "enforceContrast": false
+      },
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_LOCATION"
+      ],
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-sharing",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow TimeStream to track mileage only while you are on the clock.",
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
