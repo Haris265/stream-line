@@ -3,15 +3,15 @@ import {
   ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
-  Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from "react-native";
-import { Link } from "expo-router";
 
+import { BrandLogo } from "../src/components/BrandLogo";
 import { useAuthStore } from "../src/stores/trackingStore";
 import { colors, spacing } from "../src/theme";
 
@@ -37,17 +37,21 @@ export default function LoginScreen() {
   function onForgot() {
     Alert.alert(
       "Forgot password?",
-      "Contact your employer to reset your TimeStream password."
+      "Contact your employer to reset your Forever Culture password."
     );
   }
 
   return (
     <KeyboardAvoidingView
       style={styles.root}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      behavior="padding"
+      keyboardVerticalOffset={12}
     >
-      <View style={styles.inner}>
-        <Text style={styles.brand}>TimeStream</Text>
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={styles.scrollContent}
+      >
+        <BrandLogo size={280} />
         <Text style={styles.sub}>Employee time clock</Text>
 
         <TextInput
@@ -87,14 +91,10 @@ export default function LoginScreen() {
         </Pressable>
 
         <Text style={styles.help}>
-          Your employer invites you to TimeStream. Use the email and password
+          Your employer invites you to Forever Culture. Use the email and password
           you set when you accepted the invite.
         </Text>
-
-        <Link href="/privacy" style={styles.privacy}>
-          Privacy Policy
-        </Link>
-      </View>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
@@ -103,18 +103,12 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: colors.bg,
-    justifyContent: "center",
   },
-  inner: {
+  scrollContent: {
+    flexGrow: 1,
+    justifyContent: "center",
     paddingHorizontal: spacing.screen,
     gap: 12,
-  },
-  brand: {
-    fontSize: 36,
-    fontWeight: "800",
-    color: colors.text,
-    textAlign: "center",
-    letterSpacing: -0.5,
   },
   sub: {
     color: colors.muted,
@@ -153,13 +147,6 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     marginTop: 8,
     fontSize: 13,
-  },
-  privacy: {
-    marginTop: 28,
-    textAlign: "center",
-    color: colors.privacyLink,
-    textDecorationLine: "underline",
-    fontSize: 14,
   },
   error: { color: colors.danger, textAlign: "center" },
 });

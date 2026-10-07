@@ -18,9 +18,9 @@ export default function PrivacyScreen() {
         }}
       />
       <ScrollView contentContainerStyle={styles.content}>
-        <Text style={styles.title}>TimeStream Privacy</Text>
+        <Text style={styles.title}>Forever Culture Privacy</Text>
         <Text style={styles.body}>
-          TimeStream only shares your location with your employer while you are
+          Forever Culture only shares your location with your employer while you are
           on the clock.
         </Text>
         <Text style={styles.bullet}>

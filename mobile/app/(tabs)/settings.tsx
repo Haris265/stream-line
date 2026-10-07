@@ -193,7 +193,7 @@ export default function SettingsScreen() {
           iconColor={colors.dangerSoft}
           iconBg="rgba(239, 68, 68, 0.12)"
           title="Delete account"
-          subtitle="Deactivate your TimeStream account"
+          subtitle="Deactivate your Forever Culture account"
           titleColor={colors.dangerSoft}
           onPress={confirmDelete}
           showChevron={false}

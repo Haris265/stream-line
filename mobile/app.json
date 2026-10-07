@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "TimeStream",
+    "name": "Forever Culture",
     "slug": "timestream-miles",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -13,9 +13,9 @@
       "bundleIdentifier": "com.timestream.miles",
       "infoPlist": {
         "UIBackgroundModes": ["location"],
-        "NSLocationWhenInUseUsageDescription": "TimeStream tracks your location only while you are clocked in to calculate work mileage.",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "TimeStream tracks mileage in the background only during an active shift.",
-        "NSLocationAlwaysUsageDescription": "TimeStream tracks mileage in the background only during an active shift."
+        "NSLocationWhenInUseUsageDescription": "Forever Culture tracks your location only while you are clocked in to calculate work mileage.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Forever Culture tracks mileage in the background only during an active shift.",
+        "NSLocationAlwaysUsageDescription": "Forever Culture tracks mileage in the background only during an active shift."
       }
     },
     "android": {
@@ -51,7 +51,7 @@
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "Allow TimeStream to track mileage only while you are on the clock.",
+          "locationAlwaysAndWhenInUsePermission": "Allow Forever Culture to track mileage only while you are on the clock.",
           "isAndroidBackgroundLocationEnabled": true,
           "isAndroidForegroundServiceEnabled": true
         }

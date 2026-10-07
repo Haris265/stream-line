@@ -90,7 +90,7 @@ export async function startBackgroundTracking(meta: {
     distanceInterval: LOCATION_DISTANCE_INTERVAL_M,
     showsBackgroundLocationIndicator: true,
     foregroundService: {
-      notificationTitle: "TimeStream — on shift",
+      notificationTitle: "Forever Culture — on shift",
       notificationBody: "GPS mileage is tracking while you are clocked in.",
       notificationColor: "#0B3D2E",
     },

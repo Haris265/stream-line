@@ -8,6 +8,7 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 
+import { BrandLogo } from "../src/components/BrandLogo";
 import { useTrackingStore } from "../src/stores/trackingStore";
 import { colors, spacing } from "../src/theme";
 
@@ -36,11 +37,11 @@ export default function ConsentScreen() {
 
   return (
     <View style={styles.root}>
-      <Text style={styles.brand}>TimeStream</Text>
+      <BrandLogo size={220} />
       <View style={styles.body}>
         <Text style={styles.title}>Before you clock in</Text>
         <Text style={styles.sub}>
-          TimeStream shares your location with your employer while you are on
+          Forever Culture shares your location with your employer while you are on
           the clock.
         </Text>
         {BULLETS.map((line) => (
@@ -79,14 +80,7 @@ const styles = StyleSheet.create({
     paddingTop: 64,
     paddingBottom: 40,
   },
-  brand: {
-    color: colors.text,
-    textAlign: "center",
-    fontWeight: "700",
-    fontSize: 16,
-    marginBottom: 36,
-  },
-  body: { flex: 1, gap: 14 },
+  body: { flex: 1, gap: 14, marginTop: 12 },
   title: {
     color: colors.text,
     fontSize: 28,

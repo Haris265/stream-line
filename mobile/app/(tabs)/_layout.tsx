@@ -3,6 +3,7 @@ import { Tabs } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { BrandLogo } from "../../src/components/BrandLogo";
 import { colors } from "../../src/theme";
 
 type IconName = keyof typeof Ionicons.glyphMap;
@@ -26,6 +27,10 @@ function tabIcon(outline: IconName, filled: IconName) {
   );
 }
 
+function HeaderLogo() {
+  return <BrandLogo size={56} />;
+}
+
 export default function TabsLayout() {
   const insets = useSafeAreaInsets();
   const bottomInset =
@@ -39,7 +44,7 @@ export default function TabsLayout() {
         headerStyle: { backgroundColor: colors.bg },
         headerTintColor: colors.text,
         headerTitleAlign: "center",
-        headerTitleStyle: { fontWeight: "700", fontSize: 17 },
+        headerTitle: HeaderLogo,
         headerShadowVisible: false,
         tabBarHideOnKeyboard: true,
         tabBarShowLabel: false,
@@ -60,28 +65,28 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: "TimeStream",
+          title: "Home",
           tabBarIcon: tabIcon("time-outline", "time"),
         }}
       />
       <Tabs.Screen
         name="history"
         options={{
-          title: "TimeStream",
+          title: "History",
           tabBarIcon: tabIcon("list-outline", "list"),
         }}
       />
       <Tabs.Screen
         name="team"
         options={{
-          title: "TimeStream",
+          title: "Team",
           tabBarIcon: tabIcon("people-outline", "people"),
         }}
       />
       <Tabs.Screen
         name="settings"
         options={{
-          title: "TimeStream",
+          title: "Settings",
           tabBarIcon: tabIcon("settings-outline", "settings"),
         }}
       />
