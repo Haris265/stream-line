@@ -1,10 +1,10 @@
 import { Stack, useRouter, useSegments } from "expo-router";
-import { useEffect } from "react";
-import { ActivityIndicator, View } from "react-native";
+import { useEffect, useState } from "react";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import * as SystemUI from "expo-system-ui";
 
+import { SplashScreen } from "../src/components/SplashScreen";
 import { useAuthStore } from "../src/stores/trackingStore";
 import { useTrackingStore } from "../src/stores/trackingStore";
 import { colors } from "../src/theme";
@@ -14,9 +14,11 @@ import "../src/tracking/locationService";
 SystemUI.setBackgroundColorAsync(colors.bg).catch(() => {});
 
 const PUBLIC = new Set(["login", "privacy"]);
+const SPLASH_MIN_MS = 2000;
 
 function AuthGate({ children }: { children: React.ReactNode }) {
   const { user, loading, hydrate } = useAuthStore();
+  const [minElapsed, setMinElapsed] = useState(false);
   const segments = useSegments();
   const router = useRouter();
   const refreshCurrent = useTrackingStore((s) => s.refreshCurrent);
@@ -28,7 +30,14 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   }, [hydrate]);
 
   useEffect(() => {
-    if (loading) return;
+    const id = setTimeout(() => setMinElapsed(true), SPLASH_MIN_MS);
+    return () => clearTimeout(id);
+  }, []);
+
+  const showSplash = loading || !minElapsed;
+
+  useEffect(() => {
+    if (showSplash) return;
     const root = segments[0];
     const inPublic = PUBLIC.has(String(root));
     if (!user && !inPublic) {
@@ -36,7 +45,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     } else if (user && root === "login") {
       router.replace("/(tabs)");
     }
-  }, [user, loading, segments, router]);
+  }, [user, showSplash, segments, router]);
 
   useEffect(() => {
     if (!user) return;
@@ -49,19 +58,8 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     return () => clearInterval(id);
   }, [user, attachLocationHandler, refreshCurrent, flushSync]);
 
-  if (loading) {
-    return (
-      <View
-        style={{
-          flex: 1,
-          alignItems: "center",
-          justifyContent: "center",
-          backgroundColor: colors.bg,
-        }}
-      >
-        <ActivityIndicator size="large" color={colors.accent} />
-      </View>
-    );
+  if (showSplash) {
+    return <SplashScreen />;
   }
 
   return <>{children}</>;
