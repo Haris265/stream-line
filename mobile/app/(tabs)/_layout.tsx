@@ -1,16 +1,17 @@
+import { useMemo } from "react";
 import { Platform, StyleSheet, type ColorValue } from "react-native";
 import { Tabs } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { BrandLogo } from "../../src/components/BrandLogo";
-import { colors } from "../../src/theme";
+import { useThemeColors, useThemeStore } from "../../src/stores/themeStore";
 
 type IconName = keyof typeof Ionicons.glyphMap;
 
 const TAB_CONTENT_HEIGHT = 52;
 
-function tabIcon(outline: IconName, filled: IconName) {
+function tabIcon(outline: IconName, filled: IconName, fallback: string) {
   return ({
     focused,
     color,
@@ -22,7 +23,7 @@ function tabIcon(outline: IconName, filled: IconName) {
     <Ionicons
       name={focused ? filled : outline}
       size={focused ? 26 : 24}
-      color={typeof color === "string" ? color : colors.mutedSoft}
+      color={typeof color === "string" ? color : fallback}
     />
   );
 }
@@ -32,11 +33,21 @@ function HeaderLogo() {
 }
 
 export default function TabsLayout() {
+  const colors = useThemeColors();
+  const mode = useThemeStore((s) => s.mode);
   const insets = useSafeAreaInsets();
   const bottomInset =
     Platform.OS === "android"
       ? Math.max(insets.bottom, 48)
       : Math.max(insets.bottom, 20);
+
+  const borderTop = useMemo(
+    () =>
+      mode === "light"
+        ? "rgba(226, 232, 240, 0.9)"
+        : "rgba(51, 65, 85, 0.55)",
+    [mode]
+  );
 
   return (
     <Tabs
@@ -50,7 +61,7 @@ export default function TabsLayout() {
         tabBarShowLabel: false,
         tabBarStyle: {
           backgroundColor: colors.bg,
-          borderTopColor: "rgba(51, 65, 85, 0.55)",
+          borderTopColor: borderTop,
           borderTopWidth: StyleSheet.hairlineWidth,
           elevation: 0,
           shadowOpacity: 0,
@@ -66,28 +77,28 @@ export default function TabsLayout() {
         name="index"
         options={{
           title: "Home",
-          tabBarIcon: tabIcon("time-outline", "time"),
+          tabBarIcon: tabIcon("time-outline", "time", colors.mutedSoft),
         }}
       />
       <Tabs.Screen
         name="history"
         options={{
           title: "History",
-          tabBarIcon: tabIcon("list-outline", "list"),
+          tabBarIcon: tabIcon("list-outline", "list", colors.mutedSoft),
         }}
       />
       <Tabs.Screen
         name="team"
         options={{
           title: "Team",
-          tabBarIcon: tabIcon("people-outline", "people"),
+          tabBarIcon: tabIcon("people-outline", "people", colors.mutedSoft),
         }}
       />
       <Tabs.Screen
         name="settings"
         options={{
           title: "Settings",
-          tabBarIcon: tabIcon("settings-outline", "settings"),
+          tabBarIcon: tabIcon("settings-outline", "settings", colors.mutedSoft),
         }}
       />
     </Tabs>

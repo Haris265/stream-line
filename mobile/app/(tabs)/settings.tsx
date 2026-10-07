@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -11,8 +11,14 @@ import {
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 
+import { useThemeColors, useThemeStore } from "../../src/stores/themeStore";
 import { useAuthStore } from "../../src/stores/trackingStore";
-import { colors, spacing } from "../../src/theme";
+import {
+  fonts,
+  spacing,
+  type ThemeColors,
+  type ThemeMode,
+} from "../../src/theme";
 
 type IconName = keyof typeof Ionicons.glyphMap;
 
@@ -50,6 +56,9 @@ function SettingsRow({
   titleColor,
   onPress,
   showChevron = true,
+  trailing,
+  colors,
+  styles,
 }: {
   icon: IconName;
   iconColor: string;
@@ -59,6 +68,9 @@ function SettingsRow({
   titleColor?: string;
   onPress: () => void;
   showChevron?: boolean;
+  trailing?: React.ReactNode;
+  colors: ThemeColors;
+  styles: ReturnType<typeof createStyles>;
 }) {
   return (
     <Pressable
@@ -76,26 +88,142 @@ function SettingsRow({
         </Text>
         {subtitle ? <Text style={styles.rowSubtitle}>{subtitle}</Text> : null}
       </View>
-      {showChevron ? (
+      {trailing}
+      {showChevron && !trailing ? (
         <Ionicons name="chevron-forward" size={18} color={colors.mutedSoft} />
       ) : null}
     </Pressable>
   );
 }
 
+function createStyles(colors: ThemeColors) {
+  return StyleSheet.create({
+    root: {
+      flex: 1,
+      backgroundColor: colors.bg,
+    },
+    content: {
+      paddingHorizontal: spacing.screen,
+      paddingTop: 12,
+      paddingBottom: 32,
+    },
+    centered: { alignItems: "center", justifyContent: "center" },
+    profile: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 14,
+      marginBottom: 28,
+      paddingVertical: 8,
+    },
+    avatar: {
+      width: 64,
+      height: 64,
+      borderRadius: 32,
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.border,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    avatarText: {
+      color: colors.accent,
+      fontSize: 18,
+      fontFamily: fonts.heading,
+      textAlign: "center",
+      lineHeight: 22,
+      includeFontPadding: false,
+    },
+    profileText: { flex: 1, gap: 4 },
+    name: {
+      color: colors.text,
+      fontSize: 20,
+      fontFamily: fonts.headingExtra,
+    },
+    email: {
+      color: colors.muted,
+      fontSize: 14,
+      fontFamily: fonts.body,
+    },
+    rolePill: {
+      alignSelf: "flex-start",
+      marginTop: 4,
+      backgroundColor: colors.iconAccentBg,
+      paddingHorizontal: 10,
+      paddingVertical: 3,
+      borderRadius: 999,
+    },
+    roleText: {
+      color: colors.accent,
+      fontSize: 12,
+      fontFamily: fonts.heading,
+    },
+    sectionLabel: {
+      color: colors.mutedSoft,
+      fontSize: 12,
+      fontFamily: fonts.heading,
+      letterSpacing: 0.6,
+      textTransform: "uppercase",
+      marginBottom: 8,
+      marginLeft: 2,
+    },
+    card: {
+      backgroundColor: colors.surface,
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: colors.border,
+      overflow: "hidden",
+      marginBottom: 20,
+    },
+    row: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      paddingVertical: 14,
+      paddingHorizontal: 14,
+    },
+    rowPressed: { opacity: 0.72 },
+    iconWrap: {
+      width: 36,
+      height: 36,
+      borderRadius: 10,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    rowBody: { flex: 1, gap: 2 },
+    rowTitle: {
+      color: colors.text,
+      fontSize: 16,
+      fontFamily: fonts.heading,
+    },
+    rowSubtitle: {
+      color: colors.muted,
+      fontSize: 12,
+      fontFamily: fonts.body,
+    },
+  });
+}
+
 export default function SettingsScreen() {
   const router = useRouter();
+  const colors = useThemeColors();
+  const mode = useThemeStore((s) => s.mode);
+  const setMode = useThemeStore((s) => s.setMode);
   const user = useAuthStore((s) => s.user);
   const hydrate = useAuthStore((s) => s.hydrate);
   const logout = useAuthStore((s) => s.logout);
   const [refreshing, setRefreshing] = useState(false);
   const roleLabel = user?.role === "admin" ? "Admin" : "Employee";
+  const styles = useMemo(() => createStyles(colors), [colors]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await hydrate();
     setRefreshing(false);
   }, [hydrate]);
+
+  function selectMode(next: ThemeMode) {
+    void setMode(next);
+  }
 
   if (!user && refreshing) {
     return (
@@ -138,29 +266,71 @@ export default function SettingsScreen() {
       <Text style={styles.sectionLabel}>Account</Text>
       <View style={styles.card}>
         <SettingsRow
+          colors={colors}
+          styles={styles}
           icon="person-outline"
           iconColor={colors.accent}
-          iconBg="rgba(245, 158, 11, 0.15)"
+          iconBg={colors.iconAccentBg}
           title="Profile settings"
           subtitle="Account details and deletion"
           onPress={() => router.push("/profile")}
         />
         <SettingsRow
+          colors={colors}
+          styles={styles}
           icon="people-outline"
           iconColor={colors.accent}
-          iconBg="rgba(245, 158, 11, 0.15)"
+          iconBg={colors.iconAccentBg}
           title="View team"
           subtitle="See who's on the clock"
           onPress={() => router.push("/(tabs)/team")}
         />
       </View>
 
+      <Text style={styles.sectionLabel}>Appearance</Text>
+      <View style={styles.card}>
+        <SettingsRow
+          colors={colors}
+          styles={styles}
+          icon="moon-outline"
+          iconColor={colors.accent}
+          iconBg={colors.iconAccentBg}
+          title="Dark"
+          subtitle="Current app look"
+          showChevron={false}
+          onPress={() => selectMode("dark")}
+          trailing={
+            mode === "dark" ? (
+              <Ionicons name="checkmark" size={20} color={colors.accent} />
+            ) : null
+          }
+        />
+        <SettingsRow
+          colors={colors}
+          styles={styles}
+          icon="sunny-outline"
+          iconColor={colors.accent}
+          iconBg={colors.iconAccentBg}
+          title="Light"
+          subtitle="Bright backgrounds"
+          showChevron={false}
+          onPress={() => selectMode("light")}
+          trailing={
+            mode === "light" ? (
+              <Ionicons name="checkmark" size={20} color={colors.accent} />
+            ) : null
+          }
+        />
+      </View>
+
       <Text style={styles.sectionLabel}>Session</Text>
       <View style={styles.card}>
         <SettingsRow
+          colors={colors}
+          styles={styles}
           icon="log-out-outline"
           iconColor={colors.muted}
-          iconBg="rgba(148, 163, 184, 0.12)"
+          iconBg={colors.iconMutedBg}
           title="Sign out"
           subtitle="End this session on this device"
           onPress={() => logout()}
@@ -170,103 +340,3 @@ export default function SettingsScreen() {
     </ScrollView>
   );
 }
-
-const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: colors.bg,
-  },
-  content: {
-    paddingHorizontal: spacing.screen,
-    paddingTop: 12,
-    paddingBottom: 32,
-  },
-  centered: { alignItems: "center", justifyContent: "center" },
-  profile: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
-    marginBottom: 28,
-    paddingVertical: 8,
-  },
-  avatar: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  avatarText: {
-    color: colors.accent,
-    fontSize: 22,
-    fontWeight: "800",
-  },
-  profileText: { flex: 1, gap: 4 },
-  name: {
-    color: colors.text,
-    fontSize: 20,
-    fontWeight: "800",
-  },
-  email: {
-    color: colors.muted,
-    fontSize: 14,
-  },
-  rolePill: {
-    alignSelf: "flex-start",
-    marginTop: 4,
-    backgroundColor: "rgba(245, 158, 11, 0.12)",
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-    borderRadius: 999,
-  },
-  roleText: {
-    color: colors.accent,
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  sectionLabel: {
-    color: colors.mutedSoft,
-    fontSize: 12,
-    fontWeight: "700",
-    letterSpacing: 0.6,
-    textTransform: "uppercase",
-    marginBottom: 8,
-    marginLeft: 2,
-  },
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: colors.border,
-    overflow: "hidden",
-    marginBottom: 20,
-  },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    paddingVertical: 14,
-    paddingHorizontal: 14,
-  },
-  rowPressed: { opacity: 0.72 },
-  iconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  rowBody: { flex: 1, gap: 2 },
-  rowTitle: {
-    color: colors.text,
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  rowSubtitle: {
-    color: colors.muted,
-    fontSize: 12,
-  },
-});

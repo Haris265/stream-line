@@ -1,10 +1,44 @@
+import { useMemo } from "react";
 import { Stack, useRouter } from "expo-router";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
-import { colors, spacing } from "../src/theme";
+import { useThemeColors } from "../src/stores/themeStore";
+import { fonts, spacing, type ThemeColors } from "../src/theme";
+
+function createStyles(colors: ThemeColors) {
+  return StyleSheet.create({
+    root: { flex: 1, backgroundColor: colors.bg },
+    content: { padding: spacing.screen, gap: 14, paddingBottom: 40 },
+    title: {
+      color: colors.text,
+      fontSize: 24,
+      fontFamily: fonts.headingExtra,
+    },
+    body: {
+      color: colors.muted,
+      fontSize: 15,
+      lineHeight: 22,
+      fontFamily: fonts.body,
+    },
+    bullet: {
+      color: colors.text,
+      fontSize: 15,
+      lineHeight: 22,
+      fontFamily: fonts.body,
+    },
+    back: { marginTop: 20, alignItems: "center" },
+    backText: {
+      color: colors.accent,
+      fontFamily: fonts.heading,
+      fontSize: 16,
+    },
+  });
+}
 
 export default function PrivacyScreen() {
   const router = useRouter();
+  const colors = useThemeColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
 
   return (
     <View style={styles.root}>
@@ -48,13 +82,3 @@ export default function PrivacyScreen() {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.bg },
-  content: { padding: spacing.screen, gap: 14, paddingBottom: 40 },
-  title: { color: colors.text, fontSize: 24, fontWeight: "800" },
-  body: { color: colors.muted, fontSize: 15, lineHeight: 22 },
-  bullet: { color: colors.text, fontSize: 15, lineHeight: 22 },
-  back: { marginTop: 20, alignItems: "center" },
-  backText: { color: colors.accent, fontWeight: "700", fontSize: 16 },
-});

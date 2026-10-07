@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -18,10 +18,71 @@ import {
   formatMiles,
 } from "../../src/tracking/constants";
 import type { LiveStatus } from "../../src/types";
+import { useThemeColors } from "../../src/stores/themeStore";
 import { useAuthStore } from "../../src/stores/trackingStore";
-import { colors, spacing } from "../../src/theme";
+import { fonts, spacing, type ThemeColors } from "../../src/theme";
+
+function createStyles(colors: ThemeColors) {
+  return StyleSheet.create({
+    root: { flex: 1, backgroundColor: colors.bg },
+    centered: { alignItems: "center", justifyContent: "center" },
+    actions: {
+      flexDirection: "row",
+      gap: 10,
+      padding: spacing.screen,
+      paddingBottom: 0,
+    },
+    btn: {
+      flex: 1,
+      backgroundColor: colors.accent,
+      borderRadius: 12,
+      paddingVertical: 12,
+      alignItems: "center",
+    },
+    btnSecondary: {
+      backgroundColor: "transparent",
+      borderWidth: 1,
+      borderColor: colors.accent,
+    },
+    btnText: { color: colors.accentText, fontFamily: fonts.heading },
+    title: {
+      color: colors.text,
+      fontFamily: fonts.headingExtra,
+      fontSize: 20,
+      marginBottom: 4,
+    },
+    card: {
+      backgroundColor: colors.surface,
+      borderRadius: 14,
+      padding: 14,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    email: {
+      fontFamily: fonts.heading,
+      color: colors.text,
+      fontSize: 16,
+    },
+    meta: { color: colors.muted, marginTop: 4, fontFamily: fonts.body },
+    empty: {
+      textAlign: "center",
+      color: colors.muted,
+      marginTop: 40,
+      fontFamily: fonts.body,
+    },
+    error: {
+      color: colors.danger,
+      textAlign: "center",
+      marginHorizontal: 16,
+      marginTop: 8,
+      fontFamily: fonts.body,
+    },
+  });
+}
 
 export default function TeamScreen() {
+  const colors = useThemeColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const user = useAuthStore((s) => s.user);
   const isAdmin = user?.role === "admin";
   const [rows, setRows] = useState<LiveStatus[]>([]);
@@ -162,49 +223,3 @@ export default function TeamScreen() {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.bg },
-  centered: { alignItems: "center", justifyContent: "center" },
-  actions: {
-    flexDirection: "row",
-    gap: 10,
-    padding: spacing.screen,
-    paddingBottom: 0,
-  },
-  btn: {
-    flex: 1,
-    backgroundColor: colors.accent,
-    borderRadius: 12,
-    paddingVertical: 12,
-    alignItems: "center",
-  },
-  btnSecondary: {
-    backgroundColor: "transparent",
-    borderWidth: 1,
-    borderColor: colors.accent,
-  },
-  btnText: { color: colors.accentText, fontWeight: "700" },
-  title: {
-    color: colors.text,
-    fontWeight: "800",
-    fontSize: 20,
-    marginBottom: 4,
-  },
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: 14,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  email: { fontWeight: "700", color: colors.text, fontSize: 16 },
-  meta: { color: colors.muted, marginTop: 4 },
-  empty: { textAlign: "center", color: colors.muted, marginTop: 40 },
-  error: {
-    color: colors.danger,
-    textAlign: "center",
-    marginHorizontal: 16,
-    marginTop: 8,
-  },
-});

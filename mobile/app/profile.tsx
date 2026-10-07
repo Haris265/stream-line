@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { Stack } from "expo-router";
 import {
   Alert,
@@ -9,8 +10,9 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
+import { useThemeColors } from "../src/stores/themeStore";
 import { useAuthStore } from "../src/stores/trackingStore";
-import { colors, spacing } from "../src/theme";
+import { fonts, spacing, type ThemeColors } from "../src/theme";
 
 type IconName = keyof typeof Ionicons.glyphMap;
 
@@ -39,6 +41,115 @@ function displayName(user: {
   return user.email?.split("@")[0] || "Account";
 }
 
+function createStyles(colors: ThemeColors) {
+  return StyleSheet.create({
+    root: {
+      flex: 1,
+      backgroundColor: colors.bg,
+    },
+    content: {
+      paddingHorizontal: spacing.screen,
+      paddingTop: 12,
+      paddingBottom: 32,
+    },
+    profile: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 14,
+      marginBottom: 28,
+      paddingVertical: 8,
+    },
+    avatar: {
+      width: 64,
+      height: 64,
+      borderRadius: 32,
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.border,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    avatarText: {
+      color: colors.accent,
+      fontSize: 18,
+      fontFamily: fonts.heading,
+      textAlign: "center",
+      lineHeight: 22,
+      includeFontPadding: false,
+    },
+    profileText: { flex: 1, gap: 4 },
+    name: {
+      color: colors.text,
+      fontSize: 20,
+      fontFamily: fonts.headingExtra,
+    },
+    email: {
+      color: colors.muted,
+      fontSize: 14,
+      fontFamily: fonts.body,
+    },
+    rolePill: {
+      alignSelf: "flex-start",
+      marginTop: 4,
+      backgroundColor: colors.iconAccentBg,
+      paddingHorizontal: 10,
+      paddingVertical: 3,
+      borderRadius: 999,
+    },
+    roleText: {
+      color: colors.accent,
+      fontSize: 12,
+      fontFamily: fonts.heading,
+    },
+    sectionLabel: {
+      color: colors.mutedSoft,
+      fontSize: 12,
+      fontFamily: fonts.heading,
+      letterSpacing: 0.6,
+      textTransform: "uppercase",
+      marginBottom: 8,
+      marginLeft: 2,
+    },
+    card: {
+      backgroundColor: colors.surface,
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: colors.border,
+      overflow: "hidden",
+      marginBottom: 20,
+    },
+    dangerCard: {
+      borderColor: "rgba(239, 68, 68, 0.25)",
+    },
+    row: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      paddingVertical: 14,
+      paddingHorizontal: 14,
+    },
+    rowPressed: { opacity: 0.72 },
+    iconWrap: {
+      width: 36,
+      height: 36,
+      borderRadius: 10,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    rowBody: { flex: 1, gap: 2 },
+    rowTitle: {
+      color: colors.text,
+      fontSize: 16,
+      fontFamily: fonts.heading,
+    },
+    rowSubtitle: {
+      color: colors.muted,
+      fontSize: 12,
+      fontFamily: fonts.body,
+    },
+  });
+}
+
 function ProfileRow({
   icon,
   iconColor,
@@ -47,6 +158,7 @@ function ProfileRow({
   subtitle,
   titleColor,
   onPress,
+  styles,
 }: {
   icon: IconName;
   iconColor: string;
@@ -55,6 +167,7 @@ function ProfileRow({
   subtitle?: string;
   titleColor?: string;
   onPress: () => void;
+  styles: ReturnType<typeof createStyles>;
 }) {
   return (
     <Pressable
@@ -77,6 +190,8 @@ function ProfileRow({
 }
 
 export default function ProfileScreen() {
+  const colors = useThemeColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const user = useAuthStore((s) => s.user);
   const deleteAccount = useAuthStore((s) => s.deleteAccount);
   const roleLabel = user?.role === "admin" ? "Admin" : "Employee";
@@ -133,9 +248,10 @@ export default function ProfileScreen() {
         <Text style={styles.sectionLabel}>Danger zone</Text>
         <View style={[styles.card, styles.dangerCard]}>
           <ProfileRow
+            styles={styles}
             icon="trash-outline"
             iconColor={colors.dangerSoft}
-            iconBg="rgba(239, 68, 68, 0.12)"
+            iconBg={colors.iconDangerBg}
             title="Delete account"
             subtitle="Deactivate your Forever Culture account"
             titleColor={colors.dangerSoft}
@@ -146,105 +262,3 @@ export default function ProfileScreen() {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: colors.bg,
-  },
-  content: {
-    paddingHorizontal: spacing.screen,
-    paddingTop: 12,
-    paddingBottom: 32,
-  },
-  profile: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
-    marginBottom: 28,
-    paddingVertical: 8,
-  },
-  avatar: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  avatarText: {
-    color: colors.accent,
-    fontSize: 22,
-    fontWeight: "800",
-  },
-  profileText: { flex: 1, gap: 4 },
-  name: {
-    color: colors.text,
-    fontSize: 20,
-    fontWeight: "800",
-  },
-  email: {
-    color: colors.muted,
-    fontSize: 14,
-  },
-  rolePill: {
-    alignSelf: "flex-start",
-    marginTop: 4,
-    backgroundColor: "rgba(245, 158, 11, 0.12)",
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-    borderRadius: 999,
-  },
-  roleText: {
-    color: colors.accent,
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  sectionLabel: {
-    color: colors.mutedSoft,
-    fontSize: 12,
-    fontWeight: "700",
-    letterSpacing: 0.6,
-    textTransform: "uppercase",
-    marginBottom: 8,
-    marginLeft: 2,
-  },
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: colors.border,
-    overflow: "hidden",
-    marginBottom: 20,
-  },
-  dangerCard: {
-    borderColor: "rgba(239, 68, 68, 0.25)",
-  },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    paddingVertical: 14,
-    paddingHorizontal: 14,
-  },
-  rowPressed: { opacity: 0.72 },
-  iconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  rowBody: { flex: 1, gap: 2 },
-  rowTitle: {
-    color: colors.text,
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  rowSubtitle: {
-    color: colors.muted,
-    fontSize: 12,
-  },
-});

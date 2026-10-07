@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -14,11 +14,65 @@ import {
   formatHours,
   formatMiles,
 } from "../../src/tracking/constants";
+import { useThemeColors } from "../../src/stores/themeStore";
 import { useTrackingStore } from "../../src/stores/trackingStore";
 import type { Shift } from "../../src/types";
-import { colors, spacing } from "../../src/theme";
+import { fonts, spacing, type ThemeColors } from "../../src/theme";
 
-function ShiftRow({ item }: { item: Shift }) {
+function createStyles(colors: ThemeColors) {
+  return StyleSheet.create({
+    root: { flex: 1, backgroundColor: colors.bg },
+    centered: { alignItems: "center", justifyContent: "center" },
+    header: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      marginBottom: 8,
+    },
+    title: {
+      fontSize: 20,
+      fontFamily: fonts.headingExtra,
+      color: colors.text,
+    },
+    refresh: { color: colors.accent, fontFamily: fonts.heading },
+    row: {
+      backgroundColor: colors.surface,
+      borderRadius: 14,
+      padding: 14,
+      flexDirection: "row",
+      alignItems: "center",
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    date: {
+      fontFamily: fonts.heading,
+      color: colors.text,
+      fontSize: 16,
+    },
+    meta: { color: colors.muted, marginTop: 4, fontFamily: fonts.body },
+    hours: { fontFamily: fonts.heading, color: colors.text },
+    miles: { color: colors.muted, marginTop: 2, fontFamily: fonts.body },
+    empty: {
+      textAlign: "center",
+      color: colors.muted,
+      marginTop: 40,
+      fontFamily: fonts.body,
+    },
+    error: {
+      color: colors.danger,
+      textAlign: "center",
+      marginTop: 12,
+      fontFamily: fonts.body,
+    },
+  });
+}
+
+function ShiftRow({
+  item,
+  styles,
+}: {
+  item: Shift;
+  styles: ReturnType<typeof createStyles>;
+}) {
   const hours =
     item.total_hours != null
       ? Number(item.total_hours)
@@ -56,6 +110,8 @@ function ShiftRow({ item }: { item: Shift }) {
 }
 
 export default function HistoryScreen() {
+  const colors = useThemeColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const history = useTrackingStore((s) => s.history);
   const loadHistory = useTrackingStore((s) => s.loadHistory);
   const error = useTrackingStore((s) => s.error);
@@ -123,36 +179,9 @@ export default function HistoryScreen() {
         ListFooterComponent={
           error ? <Text style={styles.error}>{error}</Text> : null
         }
-        renderItem={({ item }) => <ShiftRow item={item} />}
+        renderItem={({ item }) => <ShiftRow item={item} styles={styles} />}
         contentContainerStyle={{ padding: spacing.screen, gap: 10, flexGrow: 1 }}
       />
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.bg },
-  centered: { alignItems: "center", justifyContent: "center" },
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 8,
-  },
-  title: { fontSize: 20, fontWeight: "800", color: colors.text },
-  refresh: { color: colors.accent, fontWeight: "600" },
-  row: {
-    backgroundColor: colors.surface,
-    borderRadius: 14,
-    padding: 14,
-    flexDirection: "row",
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  date: { fontWeight: "700", color: colors.text, fontSize: 16 },
-  meta: { color: colors.muted, marginTop: 4 },
-  hours: { fontWeight: "700", color: colors.text },
-  miles: { color: colors.muted, marginTop: 2 },
-  empty: { textAlign: "center", color: colors.muted, marginTop: 40 },
-  error: { color: colors.danger, textAlign: "center", marginTop: 12 },
-});

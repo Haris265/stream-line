@@ -6,13 +6,15 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "timestream",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.timestream.miles",
       "infoPlist": {
-        "UIBackgroundModes": ["location"],
+        "UIBackgroundModes": [
+          "location"
+        ],
         "NSLocationWhenInUseUsageDescription": "Forever Culture tracks your location only while you are clocked in to calculate work mileage.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Forever Culture tracks mileage in the background only during an active shift.",
         "NSLocationAlwaysUsageDescription": "Forever Culture tracks mileage in the background only during an active shift."
@@ -55,7 +57,8 @@
           "isAndroidBackgroundLocationEnabled": true,
           "isAndroidForegroundServiceEnabled": true
         }
-      ]
+      ],
+      "expo-font"
     ],
     "experiments": {
       "typedRoutes": true

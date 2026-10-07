@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -12,10 +12,75 @@ import {
 } from "react-native";
 
 import { BrandLogo } from "../src/components/BrandLogo";
+import { useThemeColors } from "../src/stores/themeStore";
 import { useAuthStore } from "../src/stores/trackingStore";
-import { colors, spacing } from "../src/theme";
+import { fonts, spacing, type ThemeColors } from "../src/theme";
+
+function createStyles(colors: ThemeColors) {
+  return StyleSheet.create({
+    root: {
+      flex: 1,
+      backgroundColor: colors.bg,
+    },
+    scrollContent: {
+      flexGrow: 1,
+      paddingHorizontal: spacing.screen,
+      paddingTop: 48,
+      paddingBottom: 32,
+      gap: 8,
+    },
+    sub: {
+      color: colors.muted,
+      textAlign: "center",
+      marginBottom: 8,
+      fontSize: 16,
+      fontFamily: fonts.body,
+    },
+    input: {
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 10,
+      paddingHorizontal: 14,
+      paddingVertical: 14,
+      fontSize: 16,
+      color: colors.text,
+      fontFamily: fonts.body,
+    },
+    button: {
+      marginTop: 4,
+      backgroundColor: colors.accent,
+      borderRadius: 12,
+      paddingVertical: 16,
+      alignItems: "center",
+    },
+    buttonDisabled: { opacity: 0.7 },
+    buttonText: {
+      color: colors.accentText,
+      fontFamily: fonts.headingExtra,
+      fontSize: 17,
+    },
+    forgotWrap: { alignItems: "center", paddingVertical: 4 },
+    forgot: { color: colors.accent, fontFamily: fonts.heading, fontSize: 15 },
+    help: {
+      color: colors.muted,
+      textAlign: "center",
+      lineHeight: 20,
+      marginTop: 4,
+      fontSize: 13,
+      fontFamily: fonts.body,
+    },
+    error: {
+      color: colors.danger,
+      textAlign: "center",
+      fontFamily: fonts.body,
+    },
+  });
+}
 
 export default function LoginScreen() {
+  const colors = useThemeColors();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const login = useAuthStore((s) => s.login);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -51,7 +116,7 @@ export default function LoginScreen() {
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={styles.scrollContent}
       >
-        <BrandLogo size={280} />
+        <BrandLogo size={220} />
         <Text style={styles.sub}>Employee time clock</Text>
 
         <TextInput
@@ -98,55 +163,3 @@ export default function LoginScreen() {
     </KeyboardAvoidingView>
   );
 }
-
-const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: colors.bg,
-  },
-  scrollContent: {
-    flexGrow: 1,
-    justifyContent: "center",
-    paddingHorizontal: spacing.screen,
-    gap: 12,
-  },
-  sub: {
-    color: colors.muted,
-    textAlign: "center",
-    marginBottom: 20,
-    fontSize: 16,
-  },
-  input: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    fontSize: 16,
-    color: colors.text,
-  },
-  button: {
-    marginTop: 8,
-    backgroundColor: colors.accent,
-    borderRadius: 12,
-    paddingVertical: 16,
-    alignItems: "center",
-  },
-  buttonDisabled: { opacity: 0.7 },
-  buttonText: {
-    color: colors.accentText,
-    fontWeight: "800",
-    fontSize: 17,
-  },
-  forgotWrap: { alignItems: "center", paddingVertical: 4 },
-  forgot: { color: colors.accent, fontWeight: "600", fontSize: 15 },
-  help: {
-    color: colors.muted,
-    textAlign: "center",
-    lineHeight: 20,
-    marginTop: 8,
-    fontSize: 13,
-  },
-  error: { color: colors.danger, textAlign: "center" },
-});
