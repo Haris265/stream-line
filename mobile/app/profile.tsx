@@ -1,18 +1,16 @@
-import { useCallback, useState } from "react";
+import { Stack } from "expo-router";
 import {
-  ActivityIndicator,
+  Alert,
   Pressable,
-  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from "react-native";
-import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 
-import { useAuthStore } from "../../src/stores/trackingStore";
-import { colors, spacing } from "../../src/theme";
+import { useAuthStore } from "../src/stores/trackingStore";
+import { colors, spacing } from "../src/theme";
 
 type IconName = keyof typeof Ionicons.glyphMap;
 
@@ -41,7 +39,7 @@ function displayName(user: {
   return user.email?.split("@")[0] || "Account";
 }
 
-function SettingsRow({
+function ProfileRow({
   icon,
   iconColor,
   iconBg,
@@ -49,7 +47,6 @@ function SettingsRow({
   subtitle,
   titleColor,
   onPress,
-  showChevron = true,
 }: {
   icon: IconName;
   iconColor: string;
@@ -58,7 +55,6 @@ function SettingsRow({
   subtitle?: string;
   titleColor?: string;
   onPress: () => void;
-  showChevron?: boolean;
 }) {
   return (
     <Pressable
@@ -76,98 +72,78 @@ function SettingsRow({
         </Text>
         {subtitle ? <Text style={styles.rowSubtitle}>{subtitle}</Text> : null}
       </View>
-      {showChevron ? (
-        <Ionicons name="chevron-forward" size={18} color={colors.mutedSoft} />
-      ) : null}
     </Pressable>
   );
 }
 
-export default function SettingsScreen() {
-  const router = useRouter();
+export default function ProfileScreen() {
   const user = useAuthStore((s) => s.user);
-  const hydrate = useAuthStore((s) => s.hydrate);
-  const logout = useAuthStore((s) => s.logout);
-  const [refreshing, setRefreshing] = useState(false);
+  const deleteAccount = useAuthStore((s) => s.deleteAccount);
   const roleLabel = user?.role === "admin" ? "Admin" : "Employee";
 
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    await hydrate();
-    setRefreshing(false);
-  }, [hydrate]);
-
-  if (!user && refreshing) {
-    return (
-      <View style={[styles.root, styles.centered]}>
-        <ActivityIndicator size="large" color={colors.accent} />
-      </View>
+  function confirmDelete() {
+    Alert.alert(
+      "Delete account?",
+      "Your account will be deactivated. This cannot be undone from the app.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await deleteAccount();
+            } catch (e) {
+              Alert.alert(
+                "Error",
+                e instanceof Error ? e.message : "Could not delete account"
+              );
+            }
+          },
+        },
+      ]
     );
   }
 
   return (
-    <ScrollView
-      style={styles.root}
-      contentContainerStyle={styles.content}
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          onRefresh={onRefresh}
-          tintColor={colors.accent}
-          colors={[colors.accent]}
-        />
-      }
-    >
-      <View style={styles.profile}>
-        <View style={styles.avatar}>
-          {refreshing ? (
-            <ActivityIndicator color={colors.accent} />
-          ) : (
+    <View style={styles.root}>
+      <Stack.Screen
+        options={{
+          headerShown: true,
+          title: "Profile",
+          headerStyle: { backgroundColor: colors.bg },
+          headerTintColor: colors.text,
+          headerShadowVisible: false,
+        }}
+      />
+      <ScrollView contentContainerStyle={styles.content}>
+        <View style={styles.profile}>
+          <View style={styles.avatar}>
             <Text style={styles.avatarText}>{initials(user)}</Text>
-          )}
-        </View>
-        <View style={styles.profileText}>
-          <Text style={styles.name}>{displayName(user)}</Text>
-          <Text style={styles.email}>{user?.email || "—"}</Text>
-          <View style={styles.rolePill}>
-            <Text style={styles.roleText}>{roleLabel}</Text>
+          </View>
+          <View style={styles.profileText}>
+            <Text style={styles.name}>{displayName(user)}</Text>
+            <Text style={styles.email}>{user?.email || "—"}</Text>
+            <View style={styles.rolePill}>
+              <Text style={styles.roleText}>{roleLabel}</Text>
+            </View>
           </View>
         </View>
-      </View>
 
-      <Text style={styles.sectionLabel}>Account</Text>
-      <View style={styles.card}>
-        <SettingsRow
-          icon="person-outline"
-          iconColor={colors.accent}
-          iconBg="rgba(245, 158, 11, 0.15)"
-          title="Profile settings"
-          subtitle="Account details and deletion"
-          onPress={() => router.push("/profile")}
-        />
-        <SettingsRow
-          icon="people-outline"
-          iconColor={colors.accent}
-          iconBg="rgba(245, 158, 11, 0.15)"
-          title="View team"
-          subtitle="See who's on the clock"
-          onPress={() => router.push("/(tabs)/team")}
-        />
-      </View>
-
-      <Text style={styles.sectionLabel}>Session</Text>
-      <View style={styles.card}>
-        <SettingsRow
-          icon="log-out-outline"
-          iconColor={colors.muted}
-          iconBg="rgba(148, 163, 184, 0.12)"
-          title="Sign out"
-          subtitle="End this session on this device"
-          onPress={() => logout()}
-          showChevron={false}
-        />
-      </View>
-    </ScrollView>
+        <Text style={styles.sectionLabel}>Danger zone</Text>
+        <View style={[styles.card, styles.dangerCard]}>
+          <ProfileRow
+            icon="trash-outline"
+            iconColor={colors.dangerSoft}
+            iconBg="rgba(239, 68, 68, 0.12)"
+            title="Delete account"
+            subtitle="Deactivate your Forever Culture account"
+            titleColor={colors.dangerSoft}
+            onPress={confirmDelete}
+          />
+        </View>
+      </ScrollView>
+    </View>
   );
 }
 
@@ -181,7 +157,6 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     paddingBottom: 32,
   },
-  centered: { alignItems: "center", justifyContent: "center" },
   profile: {
     flexDirection: "row",
     alignItems: "center",
@@ -243,6 +218,9 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     overflow: "hidden",
     marginBottom: 20,
+  },
+  dangerCard: {
+    borderColor: "rgba(239, 68, 68, 0.25)",
   },
   row: {
     flexDirection: "row",

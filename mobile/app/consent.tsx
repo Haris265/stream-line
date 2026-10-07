@@ -15,7 +15,7 @@ import { colors, spacing } from "../src/theme";
 const BULLETS = [
   "Tracking starts when you clock in and stops the moment you clock out.",
   "We never track your location when you are off the clock.",
-  "Your employer uses this to verify on-site hours — nothing more.",
+  "Your employer uses this to verify on-site hours and miles traveled — nothing more.",
   "A notification stays in your status bar while tracking is on.",
 ];
 

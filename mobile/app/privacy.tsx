@@ -31,15 +31,15 @@ export default function PrivacyScreen() {
           • We never track your location when you are off the clock.
         </Text>
         <Text style={styles.bullet}>
-          • Your employer uses this to verify on-site hours and mileage — nothing
-          more.
+          • Your employer uses this to verify on-site hours and miles traveled —
+          nothing more.
         </Text>
         <Text style={styles.bullet}>
           • A notification stays in your status bar while tracking is on.
         </Text>
         <Text style={styles.body}>
-          You can request that your account and related data be deleted from the
-          app (Delete account).
+          You can request that your account and related data be deleted from
+          Settings → Profile settings (Delete account).
         </Text>
         <Pressable onPress={() => router.back()} style={styles.back}>
           <Text style={styles.backText}>Back</Text>
