@@ -26,6 +26,13 @@ type AuthState = {
   loading: boolean;
   hydrate: () => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
+  register: (payload: {
+    email: string;
+    password: string;
+    first_name: string;
+    last_name: string;
+    phone?: string;
+  }) => Promise<void>;
   logout: () => Promise<void>;
   deleteAccount: () => Promise<void>;
 };
@@ -49,6 +56,17 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
   async login(email, password) {
     const res = await api.login(email.trim().toLowerCase(), password);
+    await tokenStorage.setTokens(res.access, res.refresh);
+    set({ user: res.user });
+  },
+  async register(payload) {
+    const res = await api.register({
+      ...payload,
+      email: payload.email.trim().toLowerCase(),
+      first_name: payload.first_name.trim(),
+      last_name: payload.last_name.trim(),
+      phone: payload.phone?.trim() || undefined,
+    });
     await tokenStorage.setTokens(res.access, res.refresh);
     set({ user: res.user });
   },

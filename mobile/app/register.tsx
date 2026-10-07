@@ -2,13 +2,13 @@ import { Link } from "expo-router";
 import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
+  View,
 } from "react-native";
 
 import { BrandLogo } from "../src/components/BrandLogo";
@@ -36,6 +36,13 @@ function createStyles(colors: ThemeColors) {
       fontSize: 16,
       fontFamily: fonts.body,
     },
+    row: {
+      flexDirection: "row",
+      gap: 8,
+    },
+    half: {
+      flex: 1,
+    },
     input: {
       backgroundColor: colors.surface,
       borderWidth: 1,
@@ -60,16 +67,8 @@ function createStyles(colors: ThemeColors) {
       fontFamily: fonts.headingExtra,
       fontSize: 17,
     },
-    forgotWrap: { alignItems: "center", paddingVertical: 4 },
-    forgot: { color: colors.accent, fontFamily: fonts.heading, fontSize: 15 },
-    help: {
-      color: colors.muted,
-      textAlign: "center",
-      lineHeight: 20,
-      marginTop: 4,
-      fontSize: 13,
-      fontFamily: fonts.body,
-    },
+    linkWrap: { alignItems: "center", paddingVertical: 8 },
+    link: { color: colors.accent, fontFamily: fonts.heading, fontSize: 15 },
     error: {
       color: colors.danger,
       textAlign: "center",
@@ -78,32 +77,52 @@ function createStyles(colors: ThemeColors) {
   });
 }
 
-export default function LoginScreen() {
+export default function RegisterScreen() {
   const colors = useThemeColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
-  const login = useAuthStore((s) => s.login);
+  const register = useAuthStore((s) => s.register);
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   async function onSubmit() {
+    if (!firstName.trim() || !lastName.trim()) {
+      setError("First and last name are required.");
+      return;
+    }
+    if (!email.trim()) {
+      setError("Email is required.");
+      return;
+    }
+    if (password.length < 8) {
+      setError("Password must be at least 8 characters.");
+      return;
+    }
+    if (password !== confirmPassword) {
+      setError("Passwords do not match.");
+      return;
+    }
+
     setBusy(true);
     setError(null);
     try {
-      await login(email, password);
+      await register({
+        email,
+        password,
+        first_name: firstName,
+        last_name: lastName,
+        phone: phone.trim() || undefined,
+      });
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Login failed");
+      setError(e instanceof Error ? e.message : "Registration failed");
     } finally {
       setBusy(false);
     }
-  }
-
-  function onForgot() {
-    Alert.alert(
-      "Forgot password?",
-      "Contact your employer to reset your Forever Culture password."
-    );
   }
 
   return (
@@ -117,7 +136,26 @@ export default function LoginScreen() {
         contentContainerStyle={styles.scrollContent}
       >
         <BrandLogo size={220} />
-        <Text style={styles.sub}>Employee time clock</Text>
+        <Text style={styles.sub}>Create your employee account</Text>
+
+        <View style={styles.row}>
+          <TextInput
+            placeholder="First name"
+            placeholderTextColor={colors.mutedSoft}
+            style={[styles.input, styles.half]}
+            value={firstName}
+            onChangeText={setFirstName}
+            autoCapitalize="words"
+          />
+          <TextInput
+            placeholder="Last name"
+            placeholderTextColor={colors.mutedSoft}
+            style={[styles.input, styles.half]}
+            value={lastName}
+            onChangeText={setLastName}
+            autoCapitalize="words"
+          />
+        </View>
 
         <TextInput
           autoCapitalize="none"
@@ -129,12 +167,28 @@ export default function LoginScreen() {
           onChangeText={setEmail}
         />
         <TextInput
+          keyboardType="phone-pad"
+          placeholder="Phone (optional)"
+          placeholderTextColor={colors.mutedSoft}
+          style={styles.input}
+          value={phone}
+          onChangeText={setPhone}
+        />
+        <TextInput
           secureTextEntry
           placeholder="Password"
           placeholderTextColor={colors.mutedSoft}
           style={styles.input}
           value={password}
           onChangeText={setPassword}
+        />
+        <TextInput
+          secureTextEntry
+          placeholder="Confirm password"
+          placeholderTextColor={colors.mutedSoft}
+          style={styles.input}
+          value={confirmPassword}
+          onChangeText={setConfirmPassword}
         />
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
@@ -147,24 +201,15 @@ export default function LoginScreen() {
           {busy ? (
             <ActivityIndicator color={colors.accentText} />
           ) : (
-            <Text style={styles.buttonText}>Sign in</Text>
+            <Text style={styles.buttonText}>Create account</Text>
           )}
         </Pressable>
 
-        <Pressable onPress={onForgot} style={styles.forgotWrap}>
-          <Text style={styles.forgot}>Forgot password?</Text>
-        </Pressable>
-
-        <Link href="/register" asChild>
-          <Pressable style={styles.forgotWrap}>
-            <Text style={styles.forgot}>Create account</Text>
+        <Link href="/login" asChild>
+          <Pressable style={styles.linkWrap}>
+            <Text style={styles.link}>Already have an account? Sign in</Text>
           </Pressable>
         </Link>
-
-        <Text style={styles.help}>
-          New here? Create an employee account, or sign in with the email and
-          password from your Forever Culture invite.
-        </Text>
       </ScrollView>
     </KeyboardAvoidingView>
   );

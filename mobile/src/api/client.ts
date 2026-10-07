@@ -5,10 +5,18 @@ const API_URL =
   process.env.EXPO_PUBLIC_API_URL?.replace(/\/$/, "") ||
   "http://127.0.0.1:8000/api";
 
-type LoginResponse = {
+type AuthResponse = {
   access: string;
   refresh: string;
   user: User;
+};
+
+export type RegisterPayload = {
+  email: string;
+  password: string;
+  first_name: string;
+  last_name: string;
+  phone?: string;
 };
 
 async function authHeaders(): Promise<Record<string, string>> {
@@ -68,9 +76,15 @@ async function request<T>(
 
 export const api = {
   login(email: string, password: string) {
-    return request<LoginResponse>("/auth/login/", {
+    return request<AuthResponse>("/auth/login/", {
       method: "POST",
       body: JSON.stringify({ email, password }),
+    }, false);
+  },
+  register(payload: RegisterPayload) {
+    return request<AuthResponse>("/auth/register/", {
+      method: "POST",
+      body: JSON.stringify(payload),
     }, false);
   },
   me() {

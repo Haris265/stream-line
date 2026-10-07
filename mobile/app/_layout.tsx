@@ -20,7 +20,7 @@ import "../src/tracking/locationService";
 
 SystemUI.setBackgroundColorAsync(darkColors.bg).catch(() => {});
 
-const PUBLIC = new Set(["login", "privacy"]);
+const PUBLIC = new Set(["login", "register", "privacy"]);
 const SPLASH_MIN_MS = 2000;
 
 function AuthGate({
@@ -57,7 +57,7 @@ function AuthGate({
     const inPublic = PUBLIC.has(String(root));
     if (!user && !inPublic) {
       router.replace("/login");
-    } else if (user && root === "login") {
+    } else if (user && (root === "login" || root === "register")) {
       router.replace("/(tabs)");
     }
   }, [user, showSplash, segments, router]);
@@ -103,6 +103,7 @@ function ThemedApp() {
         }}
       >
         <Stack.Screen name="login" />
+        <Stack.Screen name="register" />
         <Stack.Screen name="privacy" />
         <Stack.Screen name="profile" />
         <Stack.Screen name="consent" />
