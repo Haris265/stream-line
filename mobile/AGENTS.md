@@ -34,6 +34,20 @@ Run lint and typecheck before declaring any task done.
 Use EAS to build, sign, and submit the app in the cloud (`eas build`, `eas submit`) and to ship over-the-air updates (`eas update`) — no local Xcode or Android Studio required. Run EAS CLI as `bunx eas-cli <command>` in Bun projects, or `npx eas-cli@latest <command>` otherwise; substitute that for bare `eas` in docs examples.
 Docs: https://docs.expo.dev/eas/index.md
 
+### First iOS IPA (Forever Culture)
+
+Requires an Expo account and an Apple Developer Program membership. From `mobile/`:
+
+```bash
+npx eas-cli@latest login
+npx eas-cli@latest init          # links project; writes extra.eas.projectId to app.json
+npm run build:ios                # preview / internal IPA → download from Expo dashboard
+npm run build:ios:prod           # App Store / TestFlight IPA
+npx eas-cli@latest submit --platform ios --profile production   # optional TestFlight upload
+```
+
+Profiles live in `eas.json` (`preview` = internal IPA, `production` = store). Bundle ID: `com.timestream.miles`.
+
 ## Rules
 
 - If `ios/` and `android/` directories do not exist, they are generated (Continuous Native Generation). Never create or edit them by hand — configure native behavior in `app.json` and config plugins.
