@@ -1,5 +1,6 @@
 import * as Location from "expo-location";
 import * as TaskManager from "expo-task-manager";
+import { Platform } from "react-native";
 
 import { enqueuePing } from "../storage/queue";
 import {
@@ -23,6 +24,7 @@ let activeShiftMeta: {
   shiftId?: number;
   shiftClientUuid?: string;
 } | null = null;
+let webWatchSub: Location.LocationSubscription | null = null;
 
 export function setLocationHandler(handler: LocationHandler | null) {
   onLocation = handler;
@@ -35,6 +37,29 @@ export function setActiveShiftMeta(meta: {
   activeShiftMeta = meta;
 }
 
+async function handleLocationFix(loc: Location.LocationObject) {
+  if (!activeShiftMeta) return;
+  const recorded_at = new Date(loc.timestamp).toISOString();
+  const payload = {
+    client_uuid: newClientUuid(),
+    shift_id: activeShiftMeta.shiftId,
+    shift_client_uuid: activeShiftMeta.shiftClientUuid,
+    latitude: loc.coords.latitude,
+    longitude: loc.coords.longitude,
+    accuracy: loc.coords.accuracy,
+    speed: loc.coords.speed,
+    recorded_at,
+  };
+  await enqueuePing(payload);
+  onLocation?.({
+    latitude: loc.coords.latitude,
+    longitude: loc.coords.longitude,
+    accuracy: loc.coords.accuracy,
+    speed: loc.coords.speed,
+    recorded_at,
+  });
+}
+
 TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
   if (error) {
     console.warn("Location task error", error);
@@ -42,34 +67,17 @@ TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
   }
   const locations = (data as { locations?: Location.LocationObject[] })
     ?.locations;
-  if (!locations?.length || !activeShiftMeta) return;
+  if (!locations?.length) return;
 
   for (const loc of locations) {
-    const recorded_at = new Date(loc.timestamp).toISOString();
-    const payload = {
-      client_uuid: newClientUuid(),
-      shift_id: activeShiftMeta.shiftId,
-      shift_client_uuid: activeShiftMeta.shiftClientUuid,
-      latitude: loc.coords.latitude,
-      longitude: loc.coords.longitude,
-      accuracy: loc.coords.accuracy,
-      speed: loc.coords.speed,
-      recorded_at,
-    };
-    await enqueuePing(payload);
-    onLocation?.({
-      latitude: loc.coords.latitude,
-      longitude: loc.coords.longitude,
-      accuracy: loc.coords.accuracy,
-      speed: loc.coords.speed,
-      recorded_at,
-    });
+    await handleLocationFix(loc);
   }
 });
 
 export async function requestTrackingPermissions(): Promise<boolean> {
   const fg = await Location.requestForegroundPermissionsAsync();
   if (fg.status !== "granted") return false;
+  if (Platform.OS === "web") return true;
   const bg = await Location.requestBackgroundPermissionsAsync();
   return bg.status === "granted" || fg.status === "granted";
 }
@@ -79,6 +87,22 @@ export async function startBackgroundTracking(meta: {
   shiftClientUuid?: string;
 }) {
   setActiveShiftMeta(meta);
+
+  if (Platform.OS === "web") {
+    if (webWatchSub) return;
+    webWatchSub = await Location.watchPositionAsync(
+      {
+        accuracy: Location.Accuracy.Balanced,
+        timeInterval: LOCATION_TIME_INTERVAL_MS,
+        distanceInterval: LOCATION_DISTANCE_INTERVAL_M,
+      },
+      (loc) => {
+        void handleLocationFix(loc);
+      }
+    );
+    return;
+  }
+
   const started = await Location.hasStartedLocationUpdatesAsync(
     LOCATION_TASK_NAME
   );
@@ -100,6 +124,13 @@ export async function startBackgroundTracking(meta: {
 
 export async function stopBackgroundTracking() {
   setActiveShiftMeta(null);
+
+  if (Platform.OS === "web") {
+    webWatchSub?.remove();
+    webWatchSub = null;
+    return;
+  }
+
   const started = await Location.hasStartedLocationUpdatesAsync(
     LOCATION_TASK_NAME
   );
