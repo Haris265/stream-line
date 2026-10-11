@@ -72,8 +72,8 @@ function createStyles(colors: ThemeColors) {
     },
     agreeText: {
       color: colors.accentText,
-      fontFamily: fonts.headingExtra,
-      fontSize: 16,
+      fontFamily: fonts.heading,
+      fontSize: 15,
     },
     notNow: { alignItems: "center", paddingVertical: 8 },
     notNowText: {

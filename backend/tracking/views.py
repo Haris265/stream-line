@@ -197,7 +197,17 @@ class SyncBatchView(APIView):
         serializer = SyncBatchSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
-        results = {"shifts": [], "pings_created": 0, "clock_outs": []}
+        results = {
+            "shifts": [],
+            "pings_created": 0,
+            "clock_outs": [],
+            "accepted_clock_in_uuids": [],
+            "accepted_clock_out_uuids": [],
+            "accepted_ping_uuids": [],
+            "skipped_ping_uuids": [],
+            "shift": None,
+        }
+        touched_shift_ids: set[int] = set()
 
         with transaction.atomic():
             for item in data.get("clock_ins", []):
@@ -205,10 +215,14 @@ class SyncBatchView(APIView):
                 existing = Shift.objects.filter(client_uuid=client_uuid).first()
                 if existing:
                     results["shifts"].append(ShiftSerializer(existing).data)
+                    results["accepted_clock_in_uuids"].append(str(client_uuid))
+                    touched_shift_ids.add(existing.id)
                     continue
                 open_shift = _user_open_shift(request.user)
                 if open_shift:
                     results["shifts"].append(ShiftSerializer(open_shift).data)
+                    results["accepted_clock_in_uuids"].append(str(client_uuid))
+                    touched_shift_ids.add(open_shift.id)
                     continue
                 clock_in = _parse_dt(item.get("clock_in") or timezone.now().isoformat())
                 shift = Shift.objects.create(
@@ -217,22 +231,31 @@ class SyncBatchView(APIView):
                     client_uuid=client_uuid,
                 )
                 results["shifts"].append(ShiftSerializer(shift).data)
+                results["accepted_clock_in_uuids"].append(str(client_uuid))
+                touched_shift_ids.add(shift.id)
 
             for item in data.get("clock_outs", []):
                 shift = None
+                ack_key = None
                 if item.get("client_uuid"):
+                    ack_key = str(item["client_uuid"])
                     shift = Shift.objects.filter(
                         client_uuid=item["client_uuid"], user=request.user
                     ).first()
                 if shift is None and item.get("shift_id"):
+                    ack_key = ack_key or f"shift:{item['shift_id']}"
                     shift = Shift.objects.filter(
                         pk=item["shift_id"], user=request.user
                     ).first()
                 if shift is None:
                     shift = _user_open_shift(request.user)
+                    if shift and not ack_key:
+                        ack_key = str(shift.client_uuid)
                 if shift is None or shift.clock_out is not None:
                     if shift:
                         results["clock_outs"].append(ShiftSerializer(shift).data)
+                        if ack_key:
+                            results["accepted_clock_out_uuids"].append(ack_key)
                     continue
                 clock_out = _parse_dt(item.get("clock_out") or timezone.now().isoformat())
                 if clock_out < shift.clock_in:
@@ -244,8 +267,13 @@ class SyncBatchView(APIView):
                 recompute_shift_distance(shift)
                 shift.refresh_from_db()
                 results["clock_outs"].append(ShiftSerializer(shift).data)
+                if ack_key:
+                    results["accepted_clock_out_uuids"].append(ack_key)
+                touched_shift_ids.add(shift.id)
 
             for item in data.get("pings", []):
+                ping_uuid = item.get("client_uuid")
+                ping_uuid_str = str(ping_uuid) if ping_uuid else None
                 shift = None
                 if item.get("shift_client_uuid"):
                     shift = Shift.objects.filter(
@@ -258,9 +286,12 @@ class SyncBatchView(APIView):
                 if shift is None:
                     shift = _user_open_shift(request.user)
                 if shift is None:
+                    if ping_uuid_str:
+                        results["skipped_ping_uuids"].append(ping_uuid_str)
                     continue
 
-                client_uuid = item.get("client_uuid") or uuid4()
+                client_uuid = ping_uuid or uuid4()
+                ping_uuid_str = str(client_uuid)
                 recorded_at = _parse_dt(item["recorded_at"])
                 _, was_created = LocationPing.objects.get_or_create(
                     client_uuid=client_uuid,
@@ -273,10 +304,28 @@ class SyncBatchView(APIView):
                         "recorded_at": recorded_at,
                     },
                 )
+                # Ack duplicates too so the client can dequeue them.
+                results["accepted_ping_uuids"].append(ping_uuid_str)
                 if was_created:
                     results["pings_created"] += 1
-                    if shift.is_open or True:
-                        recompute_shift_distance(shift)
+                    recompute_shift_distance(shift)
+                touched_shift_ids.add(shift.id)
+
+        if touched_shift_ids:
+            open_shift = (
+                Shift.objects.filter(
+                    id__in=touched_shift_ids, clock_out__isnull=True, user=request.user
+                )
+                .order_by("-clock_in")
+                .first()
+            )
+            if open_shift:
+                open_shift.refresh_from_db()
+                results["shift"] = ShiftSerializer(open_shift).data
+            elif results["clock_outs"]:
+                results["shift"] = results["clock_outs"][-1]
+            elif results["shifts"]:
+                results["shift"] = results["shifts"][-1]
 
         return Response(results)
 

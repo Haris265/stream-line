@@ -25,9 +25,13 @@ function createStyles(colors: ThemeColors) {
     scrollContent: {
       flexGrow: 1,
       paddingHorizontal: spacing.screen,
-      paddingTop: 48,
+      paddingTop: 24,
       paddingBottom: 32,
       gap: 8,
+    },
+    logoWrap: {
+      marginBottom: -8,
+      alignItems: "center",
     },
     sub: {
       color: colors.muted,
@@ -35,13 +39,6 @@ function createStyles(colors: ThemeColors) {
       marginBottom: 8,
       fontSize: 16,
       fontFamily: fonts.body,
-    },
-    row: {
-      flexDirection: "row",
-      gap: 8,
-    },
-    half: {
-      flex: 1,
     },
     input: {
       backgroundColor: colors.surface,
@@ -64,8 +61,8 @@ function createStyles(colors: ThemeColors) {
     buttonDisabled: { opacity: 0.7 },
     buttonText: {
       color: colors.accentText,
-      fontFamily: fonts.headingExtra,
-      fontSize: 17,
+      fontFamily: fonts.heading,
+      fontSize: 15,
     },
     linkWrap: { alignItems: "center", paddingVertical: 8 },
     link: { color: colors.accent, fontFamily: fonts.heading, fontSize: 15 },
@@ -135,27 +132,27 @@ export default function RegisterScreen() {
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={styles.scrollContent}
       >
-        <BrandLogo size={220} />
+        <View style={styles.logoWrap}>
+          <BrandLogo size={200} />
+        </View>
         <Text style={styles.sub}>Create your employee account</Text>
 
-        <View style={styles.row}>
-          <TextInput
-            placeholder="First name"
-            placeholderTextColor={colors.mutedSoft}
-            style={[styles.input, styles.half]}
-            value={firstName}
-            onChangeText={setFirstName}
-            autoCapitalize="words"
-          />
-          <TextInput
-            placeholder="Last name"
-            placeholderTextColor={colors.mutedSoft}
-            style={[styles.input, styles.half]}
-            value={lastName}
-            onChangeText={setLastName}
-            autoCapitalize="words"
-          />
-        </View>
+        <TextInput
+          placeholder="First name"
+          placeholderTextColor={colors.mutedSoft}
+          style={styles.input}
+          value={firstName}
+          onChangeText={setFirstName}
+          autoCapitalize="words"
+        />
+        <TextInput
+          placeholder="Last name"
+          placeholderTextColor={colors.mutedSoft}
+          style={styles.input}
+          value={lastName}
+          onChangeText={setLastName}
+          autoCapitalize="words"
+        />
 
         <TextInput
           autoCapitalize="none"

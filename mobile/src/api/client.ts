@@ -152,6 +152,11 @@ export const api = {
       shifts: Shift[];
       clock_outs: Shift[];
       pings_created: number;
+      accepted_clock_in_uuids?: string[];
+      accepted_clock_out_uuids?: string[];
+      accepted_ping_uuids?: string[];
+      skipped_ping_uuids?: string[];
+      shift?: Shift | null;
     }>("/sync/batch/", {
       method: "POST",
       body: JSON.stringify(body),

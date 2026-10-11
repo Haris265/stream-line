@@ -44,7 +44,11 @@ function createStyles(colors: ThemeColors) {
       borderWidth: 1,
       borderColor: colors.accent,
     },
-    btnText: { color: colors.accentText, fontFamily: fonts.heading },
+    btnText: {
+      color: colors.accentText,
+      fontFamily: fonts.heading,
+      fontSize: 15,
+    },
     title: {
       color: colors.text,
       fontFamily: fonts.headingExtra,

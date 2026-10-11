@@ -2,7 +2,7 @@ import { create } from "zustand";
 
 import { api } from "../api/client";
 import {
-  clearQueue,
+  applySyncAck,
   enqueueClockIn,
   enqueueClockOut,
   loadQueue,
@@ -137,10 +137,23 @@ export const useTrackingStore = create<TrackingState>((set, get) => ({
   async refreshCurrent() {
     try {
       const { shift } = await api.currentShift();
+      const prev = get();
+      const sameOpenShift =
+        Boolean(shift) &&
+        Boolean(prev.currentShift) &&
+        (shift!.id === prev.currentShift!.id ||
+          (Boolean(shift!.client_uuid) &&
+            shift!.client_uuid === prev.currentShift!.client_uuid));
+
+      const serverMiles = shift ? Number(shift.total_miles || 0) : 0;
+      const localMiles = sameOpenShift
+        ? Math.max(prev.localMiles, serverMiles)
+        : serverMiles;
+
       set({
         currentShift: shift,
-        localMiles: shift ? Number(shift.total_miles || 0) : 0,
-        lastPoint: null,
+        localMiles,
+        lastPoint: sameOpenShift ? prev.lastPoint : null,
         error: null,
       });
       if (shift && !shift.is_on_break) {
@@ -149,6 +162,8 @@ export const useTrackingStore = create<TrackingState>((set, get) => ({
           shiftClientUuid: shift.client_uuid,
         });
       } else if (shift?.is_on_break) {
+        await stopBackgroundTracking();
+      } else if (!shift) {
         await stopBackgroundTracking();
       }
     } catch (e) {
@@ -174,7 +189,8 @@ export const useTrackingStore = create<TrackingState>((set, get) => ({
       if (!ok) {
         set({
           busy: false,
-          error: "Location permission is required to track on-shift mileage.",
+          error:
+            "Always-on location permission is required to track mileage while clocked in.",
         });
         return;
       }
@@ -306,12 +322,44 @@ export const useTrackingStore = create<TrackingState>((set, get) => ({
     }
     try {
       const result = await api.syncBatch(queue);
-      await clearQueue();
-      if (result.shifts?.[0]) {
-        set({ currentShift: result.shifts[0] });
+      await applySyncAck({
+        clock_in_uuids: result.accepted_clock_in_uuids,
+        clock_out_uuids: result.accepted_clock_out_uuids,
+        ping_uuids: result.accepted_ping_uuids,
+        // Legacy servers without ack fields: clear only what we know succeeded.
+        clear_all_clock_ins:
+          !result.accepted_clock_in_uuids && Boolean(result.shifts?.length),
+        clear_all_clock_outs:
+          !result.accepted_clock_out_uuids &&
+          Boolean(result.clock_outs?.length),
+      });
+
+      // If server has no ack fields, fall back: dequeue pings only when created
+      // count matches sent (best-effort) — otherwise keep them.
+      if (!result.accepted_ping_uuids && result.pings_created > 0) {
+        const sent = queue.pings.map((p) => p.client_uuid);
+        await applySyncAck({
+          ping_uuids: sent.slice(0, result.pings_created),
+        });
       }
+
+      const updatedShift = result.shift ?? result.shifts?.[0] ?? null;
       if (result.clock_outs?.length) {
-        set({ currentShift: null });
+        await stopBackgroundTracking();
+        set({ currentShift: null, localMiles: 0, lastPoint: null });
+      } else if (updatedShift) {
+        const prev = get();
+        const serverMiles = Number(updatedShift.total_miles || 0);
+        set({
+          currentShift: updatedShift,
+          localMiles: Math.max(prev.localMiles, serverMiles),
+        });
+        if (updatedShift.is_open && !updatedShift.is_on_break) {
+          await startBackgroundTracking({
+            shiftId: updatedShift.id,
+            shiftClientUuid: updatedShift.client_uuid,
+          });
+        }
       }
     } catch {
       // keep queue for next attempt

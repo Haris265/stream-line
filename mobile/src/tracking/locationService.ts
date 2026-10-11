@@ -2,6 +2,12 @@ import * as Location from "expo-location";
 import * as TaskManager from "expo-task-manager";
 import { Platform } from "react-native";
 
+import {
+  clearActiveShiftMeta,
+  loadActiveShiftMeta,
+  saveActiveShiftMeta,
+  type ActiveShiftMeta,
+} from "../storage/activeShift";
 import { enqueuePing } from "../storage/queue";
 import {
   LOCATION_DISTANCE_INTERVAL_M,
@@ -20,30 +26,42 @@ type LocationHandler = (coords: {
 }) => void;
 
 let onLocation: LocationHandler | null = null;
-let activeShiftMeta: {
-  shiftId?: number;
-  shiftClientUuid?: string;
-} | null = null;
+let activeShiftMeta: ActiveShiftMeta | null = null;
 let webWatchSub: Location.LocationSubscription | null = null;
 
 export function setLocationHandler(handler: LocationHandler | null) {
   onLocation = handler;
 }
 
-export function setActiveShiftMeta(meta: {
-  shiftId?: number;
-  shiftClientUuid?: string;
-} | null) {
+export async function setActiveShiftMeta(meta: ActiveShiftMeta | null) {
   activeShiftMeta = meta;
+  if (meta) {
+    await saveActiveShiftMeta(meta);
+  } else {
+    await clearActiveShiftMeta();
+  }
+}
+
+async function resolveActiveShiftMeta(): Promise<ActiveShiftMeta | null> {
+  if (activeShiftMeta?.shiftId || activeShiftMeta?.shiftClientUuid) {
+    return activeShiftMeta;
+  }
+  const stored = await loadActiveShiftMeta();
+  if (stored) {
+    activeShiftMeta = stored;
+  }
+  return stored;
 }
 
 async function handleLocationFix(loc: Location.LocationObject) {
-  if (!activeShiftMeta) return;
+  const meta = await resolveActiveShiftMeta();
+  if (!meta?.shiftId && !meta?.shiftClientUuid) return;
+
   const recorded_at = new Date(loc.timestamp).toISOString();
   const payload = {
     client_uuid: newClientUuid(),
-    shift_id: activeShiftMeta.shiftId,
-    shift_client_uuid: activeShiftMeta.shiftClientUuid,
+    shift_id: meta.shiftId,
+    shift_client_uuid: meta.shiftClientUuid,
     latitude: loc.coords.latitude,
     longitude: loc.coords.longitude,
     accuracy: loc.coords.accuracy,
@@ -79,14 +97,11 @@ export async function requestTrackingPermissions(): Promise<boolean> {
   if (fg.status !== "granted") return false;
   if (Platform.OS === "web") return true;
   const bg = await Location.requestBackgroundPermissionsAsync();
-  return bg.status === "granted" || fg.status === "granted";
+  return bg.status === "granted";
 }
 
-export async function startBackgroundTracking(meta: {
-  shiftId?: number;
-  shiftClientUuid?: string;
-}) {
-  setActiveShiftMeta(meta);
+export async function startBackgroundTracking(meta: ActiveShiftMeta) {
+  await setActiveShiftMeta(meta);
 
   if (Platform.OS === "web") {
     if (webWatchSub) return;
@@ -123,7 +138,7 @@ export async function startBackgroundTracking(meta: {
 }
 
 export async function stopBackgroundTracking() {
-  setActiveShiftMeta(null);
+  await setActiveShiftMeta(null);
 
   if (Platform.OS === "web") {
     webWatchSub?.remove();

@@ -77,8 +77,8 @@ function createStyles(colors: ThemeColors) {
     },
     clockInText: {
       color: colors.accentText,
-      fontFamily: fonts.headingExtra,
-      fontSize: 18,
+      fontFamily: fonts.heading,
+      fontSize: 15,
     },
     onShiftBlock: {
       flexGrow: 1,
@@ -144,8 +144,8 @@ function createStyles(colors: ThemeColors) {
     },
     clockOutText: {
       color: "#fff",
-      fontFamily: fonts.headingExtra,
-      fontSize: 17,
+      fontFamily: fonts.heading,
+      fontSize: 15,
     },
     breakBtn: {
       borderRadius: 14,
@@ -157,7 +157,7 @@ function createStyles(colors: ThemeColors) {
     breakText: {
       color: colors.accent,
       fontFamily: fonts.heading,
-      fontSize: 16,
+      fontSize: 15,
     },
     locationNote: {
       color: colors.muted,

@@ -57,8 +57,8 @@ function createStyles(colors: ThemeColors) {
     buttonDisabled: { opacity: 0.7 },
     buttonText: {
       color: colors.accentText,
-      fontFamily: fonts.headingExtra,
-      fontSize: 17,
+      fontFamily: fonts.heading,
+      fontSize: 15,
     },
     forgotWrap: { alignItems: "center", paddingVertical: 4 },
     forgot: { color: colors.accent, fontFamily: fonts.heading, fontSize: 15 },
