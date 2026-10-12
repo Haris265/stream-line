@@ -14,7 +14,9 @@ import {
   LOCATION_TASK_NAME,
   LOCATION_TIME_INTERVAL_MS,
   haversineKm,
+  isUsableGpsFix,
   newClientUuid,
+  shouldAcceptSegment,
 } from "./constants";
 
 type LocationHandler = (coords: {
@@ -27,7 +29,22 @@ type LocationHandler = (coords: {
 
 let onLocation: LocationHandler | null = null;
 let activeShiftMeta: ActiveShiftMeta | null = null;
-let webWatchSub: Location.LocationSubscription | null = null;
+let foregroundWatchSub: Location.LocationSubscription | null = null;
+let lastHandledFix: {
+  latitude: number;
+  longitude: number;
+  at: number;
+} | null = null;
+
+const watchOptions: Location.LocationOptions = {
+  accuracy: Location.Accuracy.Balanced,
+  timeInterval: LOCATION_TIME_INTERVAL_MS,
+  distanceInterval: LOCATION_DISTANCE_INTERVAL_M,
+};
+
+/** Drop near-duplicate deliveries when FG watch + BG task both fire. */
+const DEDUPE_WINDOW_MS = 5000;
+const DEDUPE_MIN_KM = 0.01; // ~10 m
 
 export function setLocationHandler(handler: LocationHandler | null) {
   onLocation = handler;
@@ -57,23 +74,72 @@ async function handleLocationFix(loc: Location.LocationObject) {
   const meta = await resolveActiveShiftMeta();
   if (!meta?.shiftId && !meta?.shiftClientUuid) return;
 
-  const recorded_at = new Date(loc.timestamp).toISOString();
+  const { latitude, longitude, accuracy, speed } = loc.coords;
+  const at = loc.timestamp;
+
+  if (__DEV__) {
+    console.log("[location] speed m/s:", speed);
+  }
+
+  // Drop (0,0) / out-of-range / poor accuracy before any distance work.
+  if (!isUsableGpsFix({ latitude, longitude, accuracy })) {
+    return;
+  }
+
+  if (lastHandledFix) {
+    const dt = at - lastHandledFix.at;
+    const km = haversineKm(
+      lastHandledFix.latitude,
+      lastHandledFix.longitude,
+      latitude,
+      longitude
+    );
+    if (dt >= 0 && dt < DEDUPE_WINDOW_MS && km < DEDUPE_MIN_KM) {
+      return;
+    }
+
+    const segment = shouldAcceptSegment(
+      lastHandledFix,
+      { latitude, longitude },
+      {
+        accuracy,
+        speed,
+        prevRecordedAtMs: lastHandledFix.at,
+        nextRecordedAtMs: at,
+      }
+    );
+    // Teleport / bad speed: keep previous good fix, do not enqueue.
+    if (!segment.acceptPoint) {
+      return;
+    }
+  }
+
+  lastHandledFix = { latitude, longitude, at };
+
+  const recorded_at = new Date(at).toISOString();
   const payload = {
     client_uuid: newClientUuid(),
     shift_id: meta.shiftId,
     shift_client_uuid: meta.shiftClientUuid,
-    latitude: loc.coords.latitude,
-    longitude: loc.coords.longitude,
-    accuracy: loc.coords.accuracy,
-    speed: loc.coords.speed,
+    latitude,
+    longitude,
+    accuracy,
+    speed,
     recorded_at,
   };
-  await enqueuePing(payload);
+
+  try {
+    await enqueuePing(payload);
+  } catch (e) {
+    console.warn("Failed to enqueue location ping", e);
+  }
+
+  // Always update live UI miles even if the queue write failed.
   onLocation?.({
-    latitude: loc.coords.latitude,
-    longitude: loc.coords.longitude,
-    accuracy: loc.coords.accuracy,
-    speed: loc.coords.speed,
+    latitude,
+    longitude,
+    accuracy,
+    speed,
     recorded_at,
   });
 }
@@ -100,33 +166,36 @@ export async function requestTrackingPermissions(): Promise<boolean> {
   return bg.status === "granted";
 }
 
-export async function startBackgroundTracking(meta: ActiveShiftMeta) {
-  await setActiveShiftMeta(meta);
+async function startForegroundWatch(): Promise<boolean> {
+  if (foregroundWatchSub) return false;
+  foregroundWatchSub = await Location.watchPositionAsync(
+    watchOptions,
+    (loc) => {
+      void handleLocationFix(loc);
+    }
+  );
+  return true;
+}
 
-  if (Platform.OS === "web") {
-    if (webWatchSub) return;
-    webWatchSub = await Location.watchPositionAsync(
-      {
-        accuracy: Location.Accuracy.Balanced,
-        timeInterval: LOCATION_TIME_INTERVAL_MS,
-        distanceInterval: LOCATION_DISTANCE_INTERVAL_M,
-      },
-      (loc) => {
-        void handleLocationFix(loc);
-      }
-    );
-    return;
+async function seedCurrentPosition() {
+  try {
+    const loc = await Location.getCurrentPositionAsync({
+      accuracy: Location.Accuracy.Balanced,
+    });
+    await handleLocationFix(loc);
+  } catch (e) {
+    console.warn("Failed to seed current position", e);
   }
+}
 
+async function startNativeBackgroundUpdates() {
   const started = await Location.hasStartedLocationUpdatesAsync(
     LOCATION_TASK_NAME
   );
   if (started) return;
 
   await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
-    accuracy: Location.Accuracy.Balanced,
-    timeInterval: LOCATION_TIME_INTERVAL_MS,
-    distanceInterval: LOCATION_DISTANCE_INTERVAL_M,
+    ...watchOptions,
     showsBackgroundLocationIndicator: true,
     foregroundService: {
       notificationTitle: "Forever Culture — on shift",
@@ -137,14 +206,29 @@ export async function startBackgroundTracking(meta: ActiveShiftMeta) {
   });
 }
 
+export async function startBackgroundTracking(meta: ActiveShiftMeta) {
+  await setActiveShiftMeta(meta);
+
+  // Foreground watch keeps localMiles updating while the app is open
+  // (background TaskManager often runs outside the React JS context).
+  const startedFresh = await startForegroundWatch();
+  if (startedFresh) {
+    await seedCurrentPosition();
+  }
+
+  if (Platform.OS !== "web") {
+    await startNativeBackgroundUpdates();
+  }
+}
+
 export async function stopBackgroundTracking() {
   await setActiveShiftMeta(null);
 
-  if (Platform.OS === "web") {
-    webWatchSub?.remove();
-    webWatchSub = null;
-    return;
-  }
+  foregroundWatchSub?.remove();
+  foregroundWatchSub = null;
+  lastHandledFix = null;
+
+  if (Platform.OS === "web") return;
 
   const started = await Location.hasStartedLocationUpdatesAsync(
     LOCATION_TASK_NAME

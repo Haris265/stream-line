@@ -68,7 +68,7 @@ function AuthGate({
     refreshCurrent();
     flushSync();
     const id = setInterval(() => {
-      flushSync();
+      void flushSync().then(() => refreshCurrent());
     }, 30000);
     return () => clearInterval(id);
   }, [user, attachLocationHandler, refreshCurrent, flushSync]);

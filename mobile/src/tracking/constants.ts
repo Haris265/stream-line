@@ -3,6 +3,22 @@ export const KM_TO_MILES = 0.621371;
 export const LOCATION_DISTANCE_INTERVAL_M = 50;
 export const LOCATION_TIME_INTERVAL_MS = 30000;
 
+/** Reject fixes worse than this horizontal accuracy (meters). */
+export const MAX_ACCURACY_M = 20;
+/** Ignore jitter shorter than this (meters). */
+export const MIN_SEGMENT_M = 10;
+/** Reject teleports faster than this (m/s, ~112 mph). */
+export const MAX_SPEED_MPS = 50;
+/** Ignore walking/stationary: only count distance at or above this (m/s, ~8 km/h). */
+export const MIN_DRIVING_SPEED_MPS = 2.2;
+/** Treat lat/lon both near zero as invalid Null Island. */
+export const NULL_ISLAND_EPS = 0.0001;
+
+export type GeoPoint = {
+  latitude: number;
+  longitude: number;
+};
+
 export function haversineKm(
   lat1: number,
   lon1: number,
@@ -21,6 +37,110 @@ export function haversineKm(
 
 export function kmToMiles(km: number): number {
   return km * KM_TO_MILES;
+}
+
+export function isValidCoordinate(
+  latitude: number,
+  longitude: number
+): boolean {
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return false;
+  if (latitude < -90 || latitude > 90) return false;
+  if (longitude < -180 || longitude > 180) return false;
+  if (
+    Math.abs(latitude) < NULL_ISLAND_EPS &&
+    Math.abs(longitude) < NULL_ISLAND_EPS
+  ) {
+    return false;
+  }
+  return true;
+}
+
+export function isAccurateEnough(accuracy: number | null | undefined): boolean {
+  if (accuracy == null || Number.isNaN(Number(accuracy))) return true;
+  return Number(accuracy) <= MAX_ACCURACY_M;
+}
+
+export function isUsableGpsFix(coords: {
+  latitude: number;
+  longitude: number;
+  accuracy?: number | null;
+}): boolean {
+  return (
+    isValidCoordinate(coords.latitude, coords.longitude) &&
+    isAccurateEnough(coords.accuracy)
+  );
+}
+
+/**
+ * Decide whether to accept a new fix and whether to add its segment length.
+ * - acceptPoint: update last/previous location
+ * - addDistanceKm: kilometers to add (0 if seed / too small / rejected)
+ */
+export function shouldAcceptSegment(
+  prev: GeoPoint | null,
+  next: GeoPoint,
+  meta?: {
+    accuracy?: number | null;
+    speed?: number | null;
+    prevRecordedAtMs?: number | null;
+    nextRecordedAtMs?: number | null;
+  }
+): { acceptPoint: boolean; addDistanceKm: number } {
+  if (!isUsableGpsFix({ ...next, accuracy: meta?.accuracy })) {
+    return { acceptPoint: false, addDistanceKm: 0 };
+  }
+
+  // First valid lock: seed only, no distance.
+  if (!prev || !isValidCoordinate(prev.latitude, prev.longitude)) {
+    return { acceptPoint: true, addDistanceKm: 0 };
+  }
+
+  const km = haversineKm(
+    prev.latitude,
+    prev.longitude,
+    next.latitude,
+    next.longitude
+  );
+  const meters = km * 1000;
+
+  if (meters < MIN_SEGMENT_M) {
+    return { acceptPoint: true, addDistanceKm: 0 };
+  }
+
+  // Device GPS speed (m/s). Null / negative = unknown — do not block.
+  const deviceSpeed = meta?.speed;
+  if (
+    deviceSpeed != null &&
+    Number.isFinite(deviceSpeed) &&
+    deviceSpeed >= 0 &&
+    deviceSpeed < MIN_DRIVING_SPEED_MPS
+  ) {
+    return { acceptPoint: true, addDistanceKm: 0 };
+  }
+
+  const prevAt = meta?.prevRecordedAtMs;
+  const nextAt = meta?.nextRecordedAtMs;
+  if (
+    prevAt != null &&
+    nextAt != null &&
+    Number.isFinite(prevAt) &&
+    Number.isFinite(nextAt)
+  ) {
+    const dtSec = (nextAt - prevAt) / 1000;
+    if (dtSec > 0) {
+      const speedMps = meters / dtSec;
+      if (speedMps > MAX_SPEED_MPS) {
+        return { acceptPoint: false, addDistanceKm: 0 };
+      }
+    } else if (dtSec < 0) {
+      return { acceptPoint: false, addDistanceKm: 0 };
+    } else if (meters >= MIN_SEGMENT_M) {
+      // Same timestamp with a real move → teleport / bad clock.
+      return { acceptPoint: false, addDistanceKm: 0 };
+    }
+  }
+
+  return { acceptPoint: true, addDistanceKm: km };
 }
 
 export function formatHours(hours: number | null | undefined): string {

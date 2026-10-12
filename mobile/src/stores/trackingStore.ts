@@ -10,9 +10,10 @@ import {
 import { tokenStorage } from "../storage/tokens";
 import type { Shift, User } from "../types";
 import {
-  haversineKm,
+  isUsableGpsFix,
   kmToMiles,
   newClientUuid,
+  shouldAcceptSegment,
 } from "../tracking/constants";
 import {
   requestTrackingPermissions,
@@ -83,11 +84,14 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 }));
 
-type Point = { latitude: number; longitude: number };
+type Point = { latitude: number; longitude: number; recordedAtMs?: number };
 
 type TrackingState = {
   currentShift: Shift | null;
   localMiles: number;
+  /** First valid GPS lock after clock-in; null until then (miles stay 0). */
+  initialLocation: Point | null;
+  /** Previous accepted fix used for segment distance. */
   lastPoint: Point | null;
   busy: boolean;
   error: string | null;
@@ -105,6 +109,7 @@ type TrackingState = {
 export const useTrackingStore = create<TrackingState>((set, get) => ({
   currentShift: null,
   localMiles: 0,
+  initialLocation: null,
   lastPoint: null,
   busy: false,
   error: null,
@@ -112,24 +117,55 @@ export const useTrackingStore = create<TrackingState>((set, get) => ({
 
   attachLocationHandler() {
     setLocationHandler((coords) => {
-      const { lastPoint, localMiles, currentShift } = get();
+      const { lastPoint, localMiles, initialLocation, currentShift } = get();
       if (!currentShift || currentShift.is_on_break) return;
-      let miles = localMiles;
-      if (lastPoint) {
-        const km = haversineKm(
-          lastPoint.latitude,
-          lastPoint.longitude,
-          coords.latitude,
-          coords.longitude
-        );
-        miles += kmToMiles(km);
-      }
-      set({
-        lastPoint: {
+
+      if (
+        !isUsableGpsFix({
           latitude: coords.latitude,
           longitude: coords.longitude,
-        },
-        localMiles: miles,
+          accuracy: coords.accuracy,
+        })
+      ) {
+        return;
+      }
+
+      const nextPoint: Point = {
+        latitude: coords.latitude,
+        longitude: coords.longitude,
+        recordedAtMs: Date.parse(coords.recorded_at) || Date.now(),
+      };
+
+      // Wait for a valid initial GPS lock before any distance math.
+      if (!initialLocation) {
+        set({
+          initialLocation: nextPoint,
+          lastPoint: nextPoint,
+          localMiles: 0,
+        });
+        return;
+      }
+
+      // Need both previous and current before haversine.
+      if (!lastPoint) {
+        set({ lastPoint: nextPoint });
+        return;
+      }
+
+      const segment = shouldAcceptSegment(lastPoint, nextPoint, {
+        accuracy: coords.accuracy,
+        speed: coords.speed,
+        prevRecordedAtMs: lastPoint.recordedAtMs,
+        nextRecordedAtMs: nextPoint.recordedAtMs,
+      });
+
+      if (!segment.acceptPoint) {
+        return;
+      }
+
+      set({
+        lastPoint: nextPoint,
+        localMiles: localMiles + kmToMiles(segment.addDistanceKm),
       });
     });
   },
@@ -154,6 +190,7 @@ export const useTrackingStore = create<TrackingState>((set, get) => ({
         currentShift: shift,
         localMiles,
         lastPoint: sameOpenShift ? prev.lastPoint : null,
+        initialLocation: sameOpenShift ? prev.initialLocation : null,
         error: null,
       });
       if (shift && !shift.is_on_break) {
@@ -217,6 +254,7 @@ export const useTrackingStore = create<TrackingState>((set, get) => ({
       set({
         currentShift: shift,
         localMiles: 0,
+        initialLocation: null,
         lastPoint: null,
         busy: false,
       });
@@ -261,6 +299,7 @@ export const useTrackingStore = create<TrackingState>((set, get) => ({
       set({
         currentShift: null,
         localMiles: 0,
+        initialLocation: null,
         lastPoint: null,
         busy: false,
       });
@@ -297,7 +336,13 @@ export const useTrackingStore = create<TrackingState>((set, get) => ({
     set({ busy: true, error: null });
     try {
       const shift = await api.endBreak(currentShift.id);
-      set({ currentShift: shift, busy: false, lastPoint: null });
+      // Re-lock GPS after break; do not carry lastPoint across the pause.
+      set({
+        currentShift: shift,
+        busy: false,
+        lastPoint: null,
+        initialLocation: null,
+      });
       await startBackgroundTracking({
         shiftId: shift.id,
         shiftClientUuid: shift.client_uuid,
@@ -346,7 +391,12 @@ export const useTrackingStore = create<TrackingState>((set, get) => ({
       const updatedShift = result.shift ?? result.shifts?.[0] ?? null;
       if (result.clock_outs?.length) {
         await stopBackgroundTracking();
-        set({ currentShift: null, localMiles: 0, lastPoint: null });
+        set({
+          currentShift: null,
+          localMiles: 0,
+          initialLocation: null,
+          lastPoint: null,
+        });
       } else if (updatedShift) {
         const prev = get();
         const serverMiles = Number(updatedShift.total_miles || 0);
