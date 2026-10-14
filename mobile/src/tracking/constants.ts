@@ -1,7 +1,15 @@
 export const LOCATION_TASK_NAME = "TIMESTREAM_BACKGROUND_LOCATION";
 export const KM_TO_MILES = 0.621371;
-export const LOCATION_DISTANCE_INTERVAL_M = 50;
-export const LOCATION_TIME_INTERVAL_MS = 30000;
+/** Near-real-time sampling while on shift (~25 m or 10 s). */
+export const LOCATION_DISTANCE_INTERVAL_M = 25;
+export const LOCATION_TIME_INTERVAL_MS = 10000;
+
+/** Home-screen location hint: wait this long after clock-in before warning. */
+export const LOCATION_HINT_GRACE_MS = 2 * 60 * 1000;
+/** Treat as idle miles when below this (same idea as admin not_driving). */
+export const LOCATION_HINT_IDLE_MILES = 0.05;
+
+export type LocationHint = "none" | "waiting_gps" | "not_moving";
 
 /** Reject fixes worse than this horizontal accuracy (meters). */
 export const MAX_ACCURACY_M = 20;
@@ -9,8 +17,8 @@ export const MAX_ACCURACY_M = 20;
 export const MIN_SEGMENT_M = 10;
 /** Reject teleports faster than this (m/s, ~112 mph). */
 export const MAX_SPEED_MPS = 50;
-/** Ignore walking/stationary: only count distance at or above this (m/s, ~8 km/h). */
-export const MIN_DRIVING_SPEED_MPS = 2.2;
+/** Car/bike only: ignore walking/stationary below this (m/s, ~5.4 km/h); slow bikes/traffic still count. */
+export const MIN_DRIVING_SPEED_MPS = 1.5;
 /** Treat lat/lon both near zero as invalid Null Island. */
 export const NULL_ISLAND_EPS = 0.0001;
 
@@ -107,14 +115,13 @@ export function shouldAcceptSegment(
     return { acceptPoint: true, addDistanceKm: 0 };
   }
 
-  // Device GPS speed (m/s). Null / negative = unknown — do not block.
+  // Device GPS speed (m/s). Known walking/stationary → no miles.
   const deviceSpeed = meta?.speed;
-  if (
+  const hasKnownSpeed =
     deviceSpeed != null &&
     Number.isFinite(deviceSpeed) &&
-    deviceSpeed >= 0 &&
-    deviceSpeed < MIN_DRIVING_SPEED_MPS
-  ) {
+    deviceSpeed >= 0;
+  if (hasKnownSpeed && deviceSpeed! < MIN_DRIVING_SPEED_MPS) {
     return { acceptPoint: true, addDistanceKm: 0 };
   }
 
@@ -132,12 +139,19 @@ export function shouldAcceptSegment(
       if (speedMps > MAX_SPEED_MPS) {
         return { acceptPoint: false, addDistanceKm: 0 };
       }
+      // Unknown device speed: require car/bike pace from segment timing.
+      if (!hasKnownSpeed && speedMps < MIN_DRIVING_SPEED_MPS) {
+        return { acceptPoint: true, addDistanceKm: 0 };
+      }
     } else if (dtSec < 0) {
       return { acceptPoint: false, addDistanceKm: 0 };
     } else if (meters >= MIN_SEGMENT_M) {
       // Same timestamp with a real move → teleport / bad clock.
       return { acceptPoint: false, addDistanceKm: 0 };
     }
+  } else if (!hasKnownSpeed) {
+    // Cannot verify driving pace without timestamps.
+    return { acceptPoint: true, addDistanceKm: 0 };
   }
 
   return { acceptPoint: true, addDistanceKm: km };
@@ -162,4 +176,46 @@ export function newClientUuid(): string {
     const v = c === "x" ? r : (r & 0x3) | 0x8;
     return v.toString(16);
   });
+}
+
+/** Employee Home: warn when GPS stuck on one spot after grace period. */
+export function resolveLocationHint(opts: {
+  clockIn: string | null | undefined;
+  isOnBreak: boolean;
+  initialLocation: GeoPoint | null;
+  lastPoint: GeoPoint | null;
+  localMiles: number;
+  lastMovedAt: number | null;
+  now?: number;
+}): LocationHint {
+  if (opts.isOnBreak || !opts.clockIn) return "none";
+
+  const now = opts.now ?? Date.now();
+  const clockInMs = Date.parse(opts.clockIn);
+  if (!Number.isFinite(clockInMs)) return "none";
+  if (now - clockInMs < LOCATION_HINT_GRACE_MS) return "none";
+
+  if (!opts.initialLocation) return "waiting_gps";
+
+  if (opts.localMiles >= LOCATION_HINT_IDLE_MILES) return "none";
+
+  if (
+    opts.lastMovedAt != null &&
+    now - opts.lastMovedAt < LOCATION_HINT_GRACE_MS
+  ) {
+    return "none";
+  }
+
+  const last = opts.lastPoint ?? opts.initialLocation;
+  const movedM =
+    haversineKm(
+      opts.initialLocation.latitude,
+      opts.initialLocation.longitude,
+      last.latitude,
+      last.longitude
+    ) * 1000;
+
+  if (movedM >= LOCATION_DISTANCE_INTERVAL_M) return "none";
+
+  return "not_moving";
 }

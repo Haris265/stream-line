@@ -13,7 +13,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .models import LocationPing, Shift
-from .utils import km_to_miles
+from .utils import km_to_miles, shift_activity_status
 
 User = get_user_model()
 
@@ -44,6 +44,7 @@ class LiveStatusView(APIView):
                 .first()
             )
             live_hours = shift.worked_hours()
+            activity = shift_activity_status(shift, last_ping)
             payload.append(
                 {
                     "user_id": shift.user_id,
@@ -56,6 +57,10 @@ class LiveStatusView(APIView):
                     "live_hours": round(live_hours, 4),
                     "total_distance_km": float(shift.total_distance_km),
                     "total_miles": round(km_to_miles(shift.total_distance_km), 3),
+                    "activity_status": activity["activity_status"],
+                    "activity_label": activity["activity_label"],
+                    "minutes_since_last_ping": activity["minutes_since_last_ping"],
+                    "last_speed_mps": activity["last_speed_mps"],
                     "last_location": (
                         {
                             "latitude": float(last_ping.latitude),

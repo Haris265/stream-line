@@ -9,7 +9,7 @@ from rest_framework.test import APITestCase
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from .models import LocationPing, Shift
-from .utils import distance_from_pings, km_to_miles
+from .utils import distance_from_pings, km_to_miles, shift_activity_status
 
 User = get_user_model()
 
@@ -193,8 +193,9 @@ class DistanceFilterTests(APITestCase):
             client_uuid=uuid4(),
         )
         # ~100m between points; walking speed must not count, driving must.
+        # MIN_DRIVING_SPEED_MPS is 1.5 — walking must stay strictly below it.
         self._ping(shift, 37.7749, -122.4194, 0, speed=0.0)
-        self._ping(shift, 37.7758, -122.4194, 60, speed=1.5)  # walking
+        self._ping(shift, 37.7758, -122.4194, 60, speed=1.0)  # walking
         walking_only = float(
             distance_from_pings(shift.pings.order_by("recorded_at"))
         )
@@ -204,3 +205,144 @@ class DistanceFilterTests(APITestCase):
         km = float(distance_from_pings(shift.pings.order_by("recorded_at")))
         self.assertGreater(km, 0.05)
         self.assertLess(km, 0.2)
+
+    def test_null_speed_rejects_walking_pace_implied(self):
+        """No device speed: ~100m in 120s ≈ 0.83 m/s → walk, no miles."""
+        shift = Shift.objects.create(
+            user=self.user,
+            clock_in=timezone.now(),
+            client_uuid=uuid4(),
+        )
+        self._ping(shift, 37.7749, -122.4194, 0, speed=None)
+        self._ping(shift, 37.7758, -122.4194, 120, speed=None)
+        km = float(distance_from_pings(shift.pings.order_by("recorded_at")))
+        self.assertEqual(km, 0.0)
+
+    def test_null_speed_counts_driving_pace_implied(self):
+        """No device speed: ~100m in 20s ≈ 5 m/s → car/bike pace, count."""
+        shift = Shift.objects.create(
+            user=self.user,
+            clock_in=timezone.now(),
+            client_uuid=uuid4(),
+        )
+        self._ping(shift, 37.7749, -122.4194, 0, speed=None)
+        self._ping(shift, 37.7758, -122.4194, 20, speed=None)
+        km = float(distance_from_pings(shift.pings.order_by("recorded_at")))
+        self.assertGreater(km, 0.05)
+        self.assertLess(km, 0.2)
+
+
+class ActivityStatusTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email="activity@test.local",
+            password="pass12345",
+            first_name="A",
+            last_name="S",
+        )
+        self.now = timezone.now()
+
+    def _shift(self, minutes_ago=10, **kwargs):
+        return Shift.objects.create(
+            user=self.user,
+            clock_in=self.now - timedelta(minutes=minutes_ago),
+            client_uuid=uuid4(),
+            **kwargs,
+        )
+
+    def _ping(self, shift, minutes_ago=1, speed=None, lat=37.7749, lon=-122.4194):
+        return LocationPing.objects.create(
+            shift=shift,
+            client_uuid=uuid4(),
+            latitude=Decimal(str(lat)),
+            longitude=Decimal(str(lon)),
+            accuracy=10.0,
+            speed=speed,
+            recorded_at=self.now - timedelta(minutes=minutes_ago),
+        )
+
+    def test_on_break(self):
+        shift = self._shift(is_on_break=True, break_started_at=self.now)
+        result = shift_activity_status(shift, None, now=self.now)
+        self.assertEqual(result["activity_status"], "on_break")
+        self.assertEqual(result["activity_label"], "On break")
+
+    def test_starting_grace_period(self):
+        shift = self._shift(minutes_ago=2)
+        result = shift_activity_status(shift, None, now=self.now)
+        self.assertEqual(result["activity_status"], "starting")
+
+    def test_no_gps_when_no_pings(self):
+        shift = self._shift(minutes_ago=10)
+        result = shift_activity_status(shift, None, now=self.now)
+        self.assertEqual(result["activity_status"], "no_gps")
+        self.assertIsNone(result["minutes_since_last_ping"])
+
+    def test_no_gps_when_stale_ping(self):
+        shift = self._shift(minutes_ago=20)
+        ping = self._ping(shift, minutes_ago=10)
+        result = shift_activity_status(shift, ping, now=self.now)
+        self.assertEqual(result["activity_status"], "no_gps")
+        self.assertEqual(result["minutes_since_last_ping"], 10.0)
+
+    def test_not_driving_when_stationary(self):
+        shift = self._shift(minutes_ago=15, total_distance_km=Decimal("0"))
+        ping = self._ping(shift, minutes_ago=1, speed=0.2)
+        result = shift_activity_status(shift, ping, now=self.now)
+        self.assertEqual(result["activity_status"], "not_driving")
+        self.assertEqual(result["last_speed_mps"], 0.2)
+
+    def test_driving_when_miles_accrued(self):
+        # 0.1 km ≈ 0.062 miles > 0.05 threshold
+        shift = self._shift(minutes_ago=15, total_distance_km=Decimal("0.1"))
+        ping = self._ping(shift, minutes_ago=1, speed=0.0)
+        result = shift_activity_status(shift, ping, now=self.now)
+        self.assertEqual(result["activity_status"], "driving")
+
+    def test_driving_when_speed_above_threshold(self):
+        shift = self._shift(minutes_ago=15, total_distance_km=Decimal("0"))
+        ping = self._ping(shift, minutes_ago=1, speed=5.0)
+        result = shift_activity_status(shift, ping, now=self.now)
+        self.assertEqual(result["activity_status"], "driving")
+        self.assertEqual(result["last_speed_mps"], 5.0)
+
+
+class LiveStatusActivityApiTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email="live@test.local",
+            password="pass12345",
+            first_name="L",
+            last_name="S",
+        )
+        token = RefreshToken.for_user(self.user)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {token.access_token}")
+        self.now = timezone.now()
+
+    def test_live_status_includes_activity_fields(self):
+        shift = Shift.objects.create(
+            user=self.user,
+            clock_in=self.now - timedelta(minutes=15),
+            client_uuid=uuid4(),
+            total_distance_km=Decimal("0"),
+        )
+        LocationPing.objects.create(
+            shift=shift,
+            client_uuid=uuid4(),
+            latitude=Decimal("37.774900"),
+            longitude=Decimal("-122.419400"),
+            accuracy=10.0,
+            speed=0.1,
+            recorded_at=self.now - timedelta(minutes=1),
+        )
+
+        res = self.client.get("/api/admin/live-status/")
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        body = res.json()
+        self.assertEqual(len(body), 1)
+        row = body[0]
+        self.assertEqual(row["activity_status"], "not_driving")
+        self.assertEqual(row["activity_label"], "Not driving")
+        self.assertIn("minutes_since_last_ping", row)
+        self.assertIn("last_speed_mps", row)
+        self.assertAlmostEqual(row["last_speed_mps"], 0.1)

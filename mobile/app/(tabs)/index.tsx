@@ -10,7 +10,12 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 
-import { formatHours, formatMiles } from "../../src/tracking/constants";
+import {
+  formatHours,
+  formatMiles,
+  MIN_SEGMENT_M,
+  resolveLocationHint,
+} from "../../src/tracking/constants";
 import { useThemeColors } from "../../src/stores/themeStore";
 import {
   useAuthStore,
@@ -167,6 +172,14 @@ function createStyles(colors: ThemeColors) {
       lineHeight: 18,
       fontFamily: fonts.body,
     },
+    locationWarn: {
+      color: colors.danger,
+      textAlign: "center",
+      marginTop: 4,
+      fontSize: 13,
+      lineHeight: 18,
+      fontFamily: fonts.body,
+    },
     error: {
       color: colors.danger,
       textAlign: "center",
@@ -184,6 +197,9 @@ export default function ClockScreen() {
   const {
     currentShift,
     localMiles,
+    initialLocation,
+    lastPoint,
+    lastMovedAt,
     busy,
     error,
     clockOut,
@@ -221,6 +237,15 @@ export default function ClockScreen() {
 
   const onShift = Boolean(currentShift);
   const onBreak = Boolean(currentShift?.is_on_break);
+
+  const locationHint = resolveLocationHint({
+    clockIn: currentShift?.clock_in,
+    isOnBreak: onBreak,
+    initialLocation,
+    lastPoint,
+    localMiles,
+    lastMovedAt,
+  });
 
   const liveHours = (() => {
     if (!currentShift) return 0;
@@ -324,6 +349,21 @@ export default function ClockScreen() {
               <Text style={styles.statValue}>{formatMiles(localMiles)}</Text>
             </View>
           </View>
+
+          {!onBreak ? (
+            <Text style={styles.locationNote}>
+              {`Miles count for car/bike only (~${MIN_SEGMENT_M} m+). Walking does not count — keep moving.`}
+            </Text>
+          ) : null}
+
+          {locationHint === "waiting_gps" ? (
+            <Text style={styles.locationWarn}>Waiting for GPS…</Text>
+          ) : null}
+          {locationHint === "not_moving" ? (
+            <Text style={styles.locationWarn}>
+              Location is not changing — miles update only when you move
+            </Text>
+          ) : null}
 
           <View style={styles.actions}>
             <Pressable

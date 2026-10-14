@@ -24,6 +24,13 @@ export type Shift = {
   client_uuid: string;
 };
 
+export type ActivityStatus =
+  | "driving"
+  | "not_driving"
+  | "no_gps"
+  | "on_break"
+  | "starting";
+
 export type LiveStatus = {
   user_id: number;
   email: string;
@@ -35,6 +42,10 @@ export type LiveStatus = {
   live_hours: number;
   total_distance_km: number;
   total_miles: number;
+  activity_status?: ActivityStatus;
+  activity_label?: string;
+  minutes_since_last_ping?: number | null;
+  last_speed_mps?: number | null;
   last_location: {
     latitude: number;
     longitude: number;

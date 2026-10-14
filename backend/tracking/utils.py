@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import math
+from datetime import datetime, timedelta
 from decimal import Decimal
-from typing import Iterable, Sequence
+from typing import Iterable, Sequence, TypedDict
+
+from django.utils import timezone
 
 from .models import LocationPing, Shift
 
@@ -12,9 +15,29 @@ EARTH_RADIUS_KM = 6371.0
 MAX_ACCURACY_M = 20.0
 MIN_SEGMENT_M = 10.0
 MAX_SPEED_MPS = 50.0
-# Walking/stationary: only count distance at or above this (~8 km/h).
-MIN_DRIVING_SPEED_MPS = 2.2
+# Car/bike only: ignore walking/stationary below this (~5.4 km/h; slow bikes/traffic still count).
+MIN_DRIVING_SPEED_MPS = 1.5
 NULL_ISLAND_EPS = 0.0001
+
+# Live activity detection (admin Team status).
+ACTIVITY_GRACE_MINUTES = 5
+ACTIVITY_STALE_GPS_MINUTES = 5
+ACTIVITY_IDLE_MILES_THRESHOLD = 0.05
+
+ACTIVITY_LABELS = {
+    "on_break": "On break",
+    "starting": "Starting",
+    "no_gps": "No GPS",
+    "not_driving": "Not driving",
+    "driving": "Driving",
+}
+
+
+class ActivityStatusResult(TypedDict):
+    activity_status: str
+    activity_label: str
+    minutes_since_last_ping: float | None
+    last_speed_mps: float | None
 
 
 def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -84,21 +107,22 @@ def distance_from_pings(pings: Sequence[LocationPing] | Iterable[LocationPing]) 
             last = curr
             continue
 
-        # Device GPS speed (m/s). None / negative = unknown — do not block.
+        # Device GPS speed (m/s). Known walking/stationary → no miles.
         speed = curr.speed
+        speed_f: float | None = None
         if speed is not None:
             try:
                 speed_f = float(speed)
             except (TypeError, ValueError):
                 speed_f = None
-            if (
-                speed_f is not None
-                and math.isfinite(speed_f)
-                and speed_f >= 0
-                and speed_f < MIN_DRIVING_SPEED_MPS
+            if speed_f is not None and (
+                not math.isfinite(speed_f) or speed_f < 0
             ):
-                last = curr
-                continue
+                speed_f = None
+        has_known_speed = speed_f is not None
+        if has_known_speed and speed_f < MIN_DRIVING_SPEED_MPS:
+            last = curr
+            continue
 
         dt = (curr.recorded_at - last.recorded_at).total_seconds()
         if dt < 0:
@@ -106,8 +130,13 @@ def distance_from_pings(pings: Sequence[LocationPing] | Iterable[LocationPing]) 
         if dt == 0:
             # Same timestamp with real displacement → ignore teleport.
             continue
-        if meters / dt > MAX_SPEED_MPS:
+        implied_mps = meters / dt
+        if implied_mps > MAX_SPEED_MPS:
             # Keep previous good point; do not advance to the teleport.
+            continue
+        # Unknown device speed: require car/bike pace from segment timing.
+        if not has_known_speed and implied_mps < MIN_DRIVING_SPEED_MPS:
+            last = curr
             continue
 
         total += km
@@ -127,3 +156,65 @@ def km_to_miles(km: Decimal | float | None) -> float:
     if km is None:
         return 0.0
     return float(Decimal(str(km)) * KM_TO_MILES)
+
+
+def _ping_speed_mps(ping: LocationPing | None) -> float | None:
+    if ping is None or ping.speed is None:
+        return None
+    try:
+        speed_f = float(ping.speed)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(speed_f) or speed_f < 0:
+        return None
+    return speed_f
+
+
+def shift_activity_status(
+    shift: Shift,
+    last_ping: LocationPing | None = None,
+    now: datetime | None = None,
+) -> ActivityStatusResult:
+    """
+    Classify an open shift for admin live monitoring.
+
+    Priority: on_break → starting (grace) → no_gps → driving → not_driving.
+    """
+    at = now or timezone.now()
+    last_speed = _ping_speed_mps(last_ping)
+    minutes_since: float | None = None
+    if last_ping is not None:
+        minutes_since = max(
+            0.0, (at - last_ping.recorded_at).total_seconds() / 60.0
+        )
+
+    def result(status: str) -> ActivityStatusResult:
+        return {
+            "activity_status": status,
+            "activity_label": ACTIVITY_LABELS[status],
+            "minutes_since_last_ping": (
+                round(minutes_since, 1) if minutes_since is not None else None
+            ),
+            "last_speed_mps": (
+                round(last_speed, 2) if last_speed is not None else None
+            ),
+        }
+
+    if shift.is_on_break:
+        return result("on_break")
+
+    minutes_since_clock_in = (at - shift.clock_in).total_seconds() / 60.0
+    if minutes_since_clock_in < ACTIVITY_GRACE_MINUTES:
+        return result("starting")
+
+    stale_cutoff = timedelta(minutes=ACTIVITY_STALE_GPS_MINUTES)
+    if last_ping is None or (at - last_ping.recorded_at) > stale_cutoff:
+        return result("no_gps")
+
+    miles = km_to_miles(shift.total_distance_km)
+    if miles >= ACTIVITY_IDLE_MILES_THRESHOLD:
+        return result("driving")
+    if last_speed is not None and last_speed >= MIN_DRIVING_SPEED_MPS:
+        return result("driving")
+
+    return result("not_driving")

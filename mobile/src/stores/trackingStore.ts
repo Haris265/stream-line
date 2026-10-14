@@ -7,11 +7,18 @@ import {
   enqueueClockOut,
   loadQueue,
 } from "../storage/queue";
+import {
+  clearShiftMilesProgress,
+  loadMilesForShift,
+  saveShiftMilesProgress,
+} from "../storage/shiftMiles";
 import { tokenStorage } from "../storage/tokens";
 import type { Shift, User } from "../types";
 import {
+  haversineKm,
   isUsableGpsFix,
   kmToMiles,
+  LOCATION_DISTANCE_INTERVAL_M,
   newClientUuid,
   shouldAcceptSegment,
 } from "../tracking/constants";
@@ -93,6 +100,8 @@ type TrackingState = {
   initialLocation: Point | null;
   /** Previous accepted fix used for segment distance. */
   lastPoint: Point | null;
+  /** Epoch ms when location last moved enough (~25 m or driving miles). */
+  lastMovedAt: number | null;
   busy: boolean;
   error: string | null;
   history: Shift[];
@@ -106,18 +115,58 @@ type TrackingState = {
   attachLocationHandler: () => void;
 };
 
+function persistMilesState(
+  get: () => TrackingState,
+  override?: Partial<{
+    localMiles: number;
+    lastPoint: Point | null;
+    initialLocation: Point | null;
+    lastMovedAt: number | null;
+  }>
+) {
+  const state = get();
+  const shift = state.currentShift;
+  if (!shift) return;
+  const localMiles = override?.localMiles ?? state.localMiles;
+  const lastPoint =
+    override && "lastPoint" in override ? override.lastPoint! : state.lastPoint;
+  const initialLocation =
+    override && "initialLocation" in override
+      ? override.initialLocation!
+      : state.initialLocation;
+  const lastMovedAt =
+    override && "lastMovedAt" in override
+      ? override.lastMovedAt!
+      : state.lastMovedAt;
+  void saveShiftMilesProgress({
+    shiftId: shift.id || undefined,
+    shiftClientUuid: shift.client_uuid,
+    localMiles,
+    lastMovedAt,
+    lastPoint,
+    initialLocation,
+  });
+}
+
 export const useTrackingStore = create<TrackingState>((set, get) => ({
   currentShift: null,
   localMiles: 0,
   initialLocation: null,
   lastPoint: null,
+  lastMovedAt: null,
   busy: false,
   error: null,
   history: [],
 
   attachLocationHandler() {
     setLocationHandler((coords) => {
-      const { lastPoint, localMiles, initialLocation, currentShift } = get();
+      const {
+        lastPoint,
+        localMiles,
+        initialLocation,
+        lastMovedAt,
+        currentShift,
+      } = get();
       if (!currentShift || currentShift.is_on_break) return;
 
       if (
@@ -138,10 +187,14 @@ export const useTrackingStore = create<TrackingState>((set, get) => ({
 
       // Wait for a valid initial GPS lock before any distance math.
       if (!initialLocation) {
+        // Keep any already-hydrated miles (e.g. after background resume).
         set({
           initialLocation: nextPoint,
           lastPoint: nextPoint,
-          localMiles: 0,
+        });
+        persistMilesState(get, {
+          lastPoint: nextPoint,
+          initialLocation: nextPoint,
         });
         return;
       }
@@ -149,6 +202,7 @@ export const useTrackingStore = create<TrackingState>((set, get) => ({
       // Need both previous and current before haversine.
       if (!lastPoint) {
         set({ lastPoint: nextPoint });
+        persistMilesState(get, { lastPoint: nextPoint });
         return;
       }
 
@@ -163,9 +217,30 @@ export const useTrackingStore = create<TrackingState>((set, get) => ({
         return;
       }
 
+      const nextMiles = localMiles + kmToMiles(segment.addDistanceKm);
+      const fromInitialM =
+        haversineKm(
+          initialLocation.latitude,
+          initialLocation.longitude,
+          nextPoint.latitude,
+          nextPoint.longitude
+        ) * 1000;
+      const movedEnough =
+        segment.addDistanceKm > 0 ||
+        fromInitialM >= LOCATION_DISTANCE_INTERVAL_M;
+      const nextMovedAt = movedEnough
+        ? nextPoint.recordedAtMs ?? Date.now()
+        : lastMovedAt;
+
       set({
         lastPoint: nextPoint,
-        localMiles: localMiles + kmToMiles(segment.addDistanceKm),
+        localMiles: nextMiles,
+        lastMovedAt: nextMovedAt,
+      });
+      persistMilesState(get, {
+        localMiles: nextMiles,
+        lastPoint: nextPoint,
+        lastMovedAt: nextMovedAt,
       });
     });
   },
@@ -182,17 +257,53 @@ export const useTrackingStore = create<TrackingState>((set, get) => ({
             shift!.client_uuid === prev.currentShift!.client_uuid));
 
       const serverMiles = shift ? Number(shift.total_miles || 0) : 0;
-      const localMiles = sameOpenShift
-        ? Math.max(prev.localMiles, serverMiles)
-        : serverMiles;
+      const stored = shift
+        ? await loadMilesForShift({
+            id: shift.id,
+            client_uuid: shift.client_uuid,
+          })
+        : null;
+
+      const localMiles = Math.max(
+        sameOpenShift ? prev.localMiles : 0,
+        serverMiles,
+        stored?.localMiles ?? 0
+      );
+
+      const lastPoint =
+        (sameOpenShift ? prev.lastPoint : null) ??
+        stored?.lastPoint ??
+        null;
+      const initialLocation =
+        (sameOpenShift ? prev.initialLocation : null) ??
+        stored?.initialLocation ??
+        null;
+      const lastMovedAt =
+        (sameOpenShift ? prev.lastMovedAt : null) ??
+        (typeof stored?.lastMovedAt === "number" ? stored.lastMovedAt : null);
 
       set({
         currentShift: shift,
         localMiles,
-        lastPoint: sameOpenShift ? prev.lastPoint : null,
-        initialLocation: sameOpenShift ? prev.initialLocation : null,
+        lastPoint,
+        initialLocation,
+        lastMovedAt,
         error: null,
       });
+
+      if (shift) {
+        void saveShiftMilesProgress({
+          shiftId: shift.id || undefined,
+          shiftClientUuid: shift.client_uuid,
+          localMiles,
+          lastMovedAt,
+          lastPoint,
+          initialLocation,
+        });
+      } else {
+        await clearShiftMilesProgress();
+      }
+
       if (shift && !shift.is_on_break) {
         await startBackgroundTracking({
           shiftId: shift.id,
@@ -251,12 +362,22 @@ export const useTrackingStore = create<TrackingState>((set, get) => ({
           client_uuid,
         };
       }
+      await clearShiftMilesProgress();
       set({
         currentShift: shift,
         localMiles: 0,
         initialLocation: null,
         lastPoint: null,
+        lastMovedAt: null,
         busy: false,
+      });
+      void saveShiftMilesProgress({
+        shiftId: shift.id || undefined,
+        shiftClientUuid: shift.client_uuid,
+        localMiles: 0,
+        lastMovedAt: null,
+        lastPoint: null,
+        initialLocation: null,
       });
       await startBackgroundTracking({
         shiftId: shift.id || undefined,
@@ -296,11 +417,13 @@ export const useTrackingStore = create<TrackingState>((set, get) => ({
         });
       }
       await stopBackgroundTracking();
+      await clearShiftMilesProgress();
       set({
         currentShift: null,
         localMiles: 0,
         initialLocation: null,
         lastPoint: null,
+        lastMovedAt: null,
         busy: false,
       });
       if (closed) {
@@ -342,6 +465,7 @@ export const useTrackingStore = create<TrackingState>((set, get) => ({
         busy: false,
         lastPoint: null,
         initialLocation: null,
+        lastMovedAt: null,
       });
       await startBackgroundTracking({
         shiftId: shift.id,
@@ -391,18 +515,29 @@ export const useTrackingStore = create<TrackingState>((set, get) => ({
       const updatedShift = result.shift ?? result.shifts?.[0] ?? null;
       if (result.clock_outs?.length) {
         await stopBackgroundTracking();
+        await clearShiftMilesProgress();
         set({
           currentShift: null,
           localMiles: 0,
           initialLocation: null,
           lastPoint: null,
+          lastMovedAt: null,
         });
       } else if (updatedShift) {
         const prev = get();
         const serverMiles = Number(updatedShift.total_miles || 0);
+        const localMiles = Math.max(prev.localMiles, serverMiles);
         set({
           currentShift: updatedShift,
-          localMiles: Math.max(prev.localMiles, serverMiles),
+          localMiles,
+        });
+        void saveShiftMilesProgress({
+          shiftId: updatedShift.id || undefined,
+          shiftClientUuid: updatedShift.client_uuid,
+          localMiles,
+          lastMovedAt: prev.lastMovedAt,
+          lastPoint: prev.lastPoint,
+          initialLocation: prev.initialLocation,
         });
         if (updatedShift.is_open && !updatedShift.is_on_break) {
           await startBackgroundTracking({

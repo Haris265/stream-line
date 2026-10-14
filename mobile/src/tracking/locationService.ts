@@ -211,6 +211,7 @@ export async function startBackgroundTracking(meta: ActiveShiftMeta) {
 
   // Foreground watch keeps localMiles updating while the app is open
   // (background TaskManager often runs outside the React JS context).
+  // Intervals come from constants (25 m / 10 s) for near-real-time miles.
   const startedFresh = await startForegroundWatch();
   if (startedFresh) {
     await seedCurrentPosition();

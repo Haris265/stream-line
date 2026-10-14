@@ -17,10 +17,36 @@ import {
   formatHours,
   formatMiles,
 } from "../../src/tracking/constants";
-import type { LiveStatus } from "../../src/types";
+import type { ActivityStatus, LiveStatus } from "../../src/types";
 import { useThemeColors } from "../../src/stores/themeStore";
 import { useAuthStore } from "../../src/stores/trackingStore";
 import { fonts, spacing, type ThemeColors } from "../../src/theme";
+
+const POLL_MS = 30_000;
+
+function activityColor(
+  status: ActivityStatus | undefined,
+  colors: ThemeColors
+): string {
+  switch (status) {
+    case "driving":
+      return colors.onClockDot;
+    case "not_driving":
+    case "no_gps":
+      return colors.danger;
+    case "on_break":
+    case "starting":
+    default:
+      return colors.muted;
+  }
+}
+
+function formatLastGps(minutes: number | null | undefined): string {
+  if (minutes == null) return "No GPS yet";
+  if (minutes < 1) return "Last GPS just now";
+  if (minutes < 2) return "Last GPS 1 min ago";
+  return `Last GPS ${Math.round(minutes)} min ago`;
+}
 
 function createStyles(colors: ThemeColors) {
   return StyleSheet.create({
@@ -66,6 +92,11 @@ function createStyles(colors: ThemeColors) {
       fontFamily: fonts.heading,
       color: colors.text,
       fontSize: 16,
+    },
+    status: {
+      marginTop: 6,
+      fontFamily: fonts.heading,
+      fontSize: 14,
     },
     meta: { color: colors.muted, marginTop: 4, fontFamily: fonts.body },
     empty: {
@@ -118,8 +149,14 @@ export default function TeamScreen() {
           setInitialLoading(false);
         }
       })();
+
+      const interval = setInterval(() => {
+        if (alive) void load();
+      }, POLL_MS);
+
       return () => {
         alive = false;
+        clearInterval(interval);
       };
     }, [load])
   );
@@ -211,18 +248,29 @@ export default function TeamScreen() {
         ListEmptyComponent={
           <Text style={styles.empty}>No one is on the clock right now.</Text>
         }
-        renderItem={({ item }) => (
-          <View style={styles.card}>
-            <Text style={styles.email}>{item.first_name || item.email}</Text>
-            <Text style={styles.meta}>
-              {item.is_on_break ? "On a break · " : ""}
-              {formatHours(item.live_hours)} · {formatMiles(item.total_miles)}
-            </Text>
-            <Text style={styles.meta}>
-              In since {new Date(item.clock_in).toLocaleTimeString()}
-            </Text>
-          </View>
-        )}
+        renderItem={({ item }) => {
+          const status = item.activity_status;
+          const label = item.activity_label ?? "Unknown";
+          return (
+            <View style={styles.card}>
+              <Text style={styles.email}>{item.first_name || item.email}</Text>
+              <Text
+                style={[styles.status, { color: activityColor(status, colors) }]}
+              >
+                {label}
+              </Text>
+              <Text style={styles.meta}>
+                {formatHours(item.live_hours)} · {formatMiles(item.total_miles)}
+              </Text>
+              <Text style={styles.meta}>
+                {formatLastGps(item.minutes_since_last_ping)}
+              </Text>
+              <Text style={styles.meta}>
+                In since {new Date(item.clock_in).toLocaleTimeString()}
+              </Text>
+            </View>
+          );
+        }}
       />
     </View>
   );
